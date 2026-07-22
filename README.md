@@ -1,10 +1,16 @@
 # Broker AI Analyst — MVP
 
 Чат-бот, отвечающий на вопросы на естественном языке по данным брокера
-(депозиты, торговый оборот, активные трейдеры) — на основе **семантического слоя**.
+(депозиты, торговый оборот, активные трейдеры, расходы на маркетинг, планы) —
+на основе **семантического слоя** с многослойными guardrails.
 
 Домен выбран близким к брокерскому бизнесу намеренно: воронка «депозит → торговля»,
-метрики оборота и активных трейдеров.
+метрики оборота и активных трейдеров, план vs факт, расходная часть.
+
+**Коротко о возможностях:** governed-ответы по сертифицированным метрикам (L1) +
+governed SQL-fallback для «длинного хвоста» под теми же guardrails (L2); честный
+отказ, когда данных нет (не галлюцинирует); контекст диалога (follow-up вопросы);
+авто-визуализация (KPI / линия / бары / хитмап) с тултипами; HTML-отчёт и MCP-сервер.
 
 ---
 
@@ -18,12 +24,19 @@
 
 ```
 Вопрос (NL)
-  → LLM: structured output {metric, group_by, filters, order, limit}   (llm.py)
-  → валидация плана по semantic layer (allow-list метрик/измерений)     (semantic.py)
-  → детерминированная компиляция в SQL                                  (semantic.py)
-  → guardrails: SELECT-only, allow-list таблиц, LIMIT, dry-run EXPLAIN  (guardrails.py)
-  → DuckDB (read-only)
-  → ответ + "как я понял вопрос" + видимый SQL                          (app.py)
+  │
+  ├─► L1 (основной путь): semantic layer
+  │     LLM: structured output {metric, group_by, filters, order, limit}  (llm.py)
+  │     → валидация плана по semantic layer (allow-list)                   (semantic.py)
+  │     → детерминированная компиляция в SQL                              (semantic.py)
+  │
+  ├─► L2 (если метрики нет): governed SQL-fallback
+  │     LLM пишет ОДИН read-only SELECT (оконки, доли, план-vs-факт);
+  │     если данных нет в схеме — возвращает NO_DATA → честный отказ
+  │
+  ├─► guardrails: SELECT/WITH-only, allow-list таблиц, LIMIT, dry-run     (guardrails.py)
+  ├─► DuckDB (read-only)
+  └─► ответ + "как я понял вопрос" + видимый SQL + авто-график           (app.py)
 ```
 
 ---
@@ -62,12 +75,13 @@ python eval.py                   # прогон качества
 
 Задача без формальных требований — поэтому границы MVP я провёл сам:
 
-- **Вошло:** semantic layer, NL→plan→SQL, guardrails, eval, чат-UI с графиками,
-  прозрачность (видимый SQL), работа без ключа.
+- **Вошло:** semantic layer, NL→plan→SQL, два уровня ответа (L1 + governed
+  SQL-fallback L2), честный отказ при отсутствии данных, guardrails, eval,
+  контекст диалога (follow-up), авто-визуализация (KPI/линия/бары/хитмап),
+  HTML-отчёт, MCP-сервер (базовый), прозрачность (видимый SQL), работа без ключа.
 - **Не вошло (следующие шаги, но заложено архитектурно):**
   - RAG-retrieval метрик через embeddings (нужно при сотнях метрик; сейчас каталог целиком в промпт);
-  - многошаговые вопросы и джойны фактов между собой;
-  - MCP-tool для деплоя готового борда (следующий уровень парадигмы: заказчик → AI → деплой);
+  - настоящий фрод-детект и поведенческие аномалии (ML/статистика — MVP честно отказывает);
   - RLS / маскирование на уровне слоя; кэширование; расширенный eval с LLM-as-judge.
 
 ---
@@ -75,14 +89,17 @@ python eval.py                   # прогон качества
 ## Структура
 
 ```
-generate_data.py     — синтетические данные брокера → broker.duckdb
+generate_data.py     — синтетика брокера → broker.duckdb (clients, deposits,
+                        trades, marketing_spend, targets)
 semantic_layer.yaml  — семантический слой: метрики, измерения, синонимы, few-shot
 semantic.py          — загрузка слоя, валидация плана, компиляция в SQL
-llm.py               — провайдеры (Anthropic/OpenAI/Ollama) + fallback без ключа
-guardrails.py        — SELECT-only, allow-list, LIMIT, dry-run EXPLAIN
-pipeline.py          — оркестратор (вопрос → ответ), CLI
-eval.py              — золотой тест-сет + метрики качества
-app.py               — Streamlit чат-UI
+llm.py               — провайдеры (Anthropic/OpenAI/Ollama) + fallback + L2 SQL
+guardrails.py        — SELECT/WITH-only, allow-list (с CTE), LIMIT, dry-run EXPLAIN
+pipeline.py          — оркестратор (L1 + L2 + multi-turn), CLI
+eval.py              — золотой тест-сет + метрики качества (L1 + L2)
+report.py            — авто-визуализация (KPI/линия/бары/хитмап) + HTML-отчёт
+app.py               — Streamlit чат-UI (история, графики, фирменные цвета)
+mcp_server.py        — MCP-сервер: витрина инструментов для агента
 ```
 
 ---

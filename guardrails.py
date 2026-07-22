@@ -10,7 +10,7 @@ Guardrails: многослойная защита перед выполнени�
 """
 import re
 
-ALLOWED_TABLES = {"clients", "deposits", "trades"}
+ALLOWED_TABLES = {"clients", "deposits", "trades", "marketing_spend", "targets"}
 FORBIDDEN = re.compile(
     r"\b(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|TRUNCATE|GRANT|REVOKE|"
     r"ATTACH|COPY|INSTALL|LOAD|PRAGMA|CALL|EXPORT)\b", re.IGNORECASE)
@@ -27,7 +27,9 @@ def check_sql(sql: str) -> None:
     """Статические проверки. Бросает GuardrailError при нарушении."""
     stripped = sql.strip().rstrip(";")
 
-    if not stripped.upper().startswith("SELECT"):
+    # разрешаем SELECT и WITH...SELECT (CTE); DML/DDL ловит FORBIDDEN ниже
+    if not (stripped.upper().startswith("SELECT")
+            or stripped.upper().startswith("WITH")):
         raise GuardrailError("Разрешены только SELECT-запросы.")
 
     if ";" in stripped:
@@ -36,10 +38,16 @@ def check_sql(sql: str) -> None:
     if FORBIDDEN.search(stripped):
         raise GuardrailError("Обнаружена запрещённая операция (DDL/DML).")
 
-    # allow-list таблиц: всё после FROM/JOIN должно быть из белого списка
+    # allow-list таблиц: всё после FROM/JOIN должно быть из белого списка.
+    # Имена, введённые самим запросом (CTE из WITH, алиасы подзапросов), —
+    # легальны: их тело всё равно ссылается на базовые таблицы, которые тоже
+    # проверяются этим же правилом.
+    local = {n.lower() for n in (
+        re.findall(r"(?:WITH|,)\s+(\w+)\s+AS\s*\(", stripped, re.IGNORECASE) +
+        re.findall(r"\)\s+(?:AS\s+)?(\w+)", stripped, re.IGNORECASE))}
     referenced = set(re.findall(r"\b(?:FROM|JOIN)\s+([A-Za-z_][\w]*)",
                                 stripped, re.IGNORECASE))
-    unknown = {t.lower() for t in referenced} - ALLOWED_TABLES
+    unknown = {t.lower() for t in referenced} - ALLOWED_TABLES - local
     if unknown:
         raise GuardrailError(f"Обращение к неразрешённым таблицам: {unknown}")
 

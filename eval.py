@@ -28,6 +28,7 @@ GOLDEN = [
     {"q": "динамика депозитов по месяцам",            "metric": "total_deposits", "dims": ["deposit_month"]},
     {"q": "оборот по каналам привлечения",            "metric": "trading_volume", "dims": ["acquisition_channel"]},
     {"q": "число депозитов по странам",              "metric": "deposit_count",  "dims": ["country"]},
+    {"q": "расходы на маркетинг по каналам",          "metric": "marketing_cost", "dims": ["mkt_channel"]},
 ]
 
 # Вопросы, которые governed-слой (L1) ДОЛЖЕН отклонить (не сертифицированная метрика)

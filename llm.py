@@ -29,8 +29,26 @@ SYSTEM_PROMPT = """Ты — аналитический ассистент бро
 - Выбирай ТОЛЬКО метрики и измерения из каталога, ничего не выдумывай.
 - Разрезы (group_by) должны входить в allowed_dimensions выбранной метрики.
 - Если пользователь просит "топ N" — ставь limit: N и order: "desc".
+- СУПЕРЛАТИВЫ: "лучший/больше всего/самый крупный" -> order "desc";
+  "худший/самый плохой/меньше всего/минимальный" -> order "asc".
 - Фильтр по году: {{"year": 2026}}. Фильтр по измерению: {{"country": "Cyprus"}}.
 - Если вопрос не про данные — верни {{"metric": null, "reason": "..."}}.
+- ОКОННЫЕ ЗАПРОСЫ (накопительный/нарастающий итог, running total, скользящее
+  среднее, доля от общего, ранг, перцентиль) — это НЕ сертифицированные метрики:
+  верни {{"metric": null, "reason": "нужна оконная функция"}} (уйдёт в L2,
+  который умеет оконки).
+- Если спрашивают про КОНКРЕТНОГО клиента/трейдера (кто именно, какой client_id,
+  «самый ... трейдер/клиент»), а среди измерений НЕТ уровня клиента — верни
+  {{"metric": null, "reason": "нужен уровень клиента"}} (уйдёт в SQL-fallback).
+- FOLLOW-UP: если ниже дан "КОНТЕКСТ ПРЕДЫДУЩЕГО ВОПРОСА", вопрос считается
+  уточнением ТОЛЬКО когда он меняет ОФОРМЛЕНИЕ предыдущего (разрез/фильтр/
+  порядок/лимит): "а теперь по странам", "добавь разрез X", "убери фильтр",
+  "а по месяцам", "сделай за 2025". Тогда возьми предыдущий план и измени
+  ТОЛЬКО запрошенное.
+  ВАЖНО: если вопрос вводит НОВУЮ метрику/показатель/понятие (напр.
+  "накопительный итог", "pnl", "доля", "оборот", "средний чек") — это НОВЫЙ
+  самостоятельный вопрос, ИГНОРИРУЙ предыдущий план (не тащи его разрезы),
+  даже если начинается с "а"/"а можешь".
 
 Отвечай ТОЛЬКО валидным JSON, без пояснений и markdown:
 {{"metric": "...", "group_by": [...], "filters": {{}}, "order": "desc", "limit": null}}
@@ -54,7 +72,11 @@ SCHEMA = """Таблицы (DuckDB):
 - clients(client_id, country, account_type, acquisition_channel, registration_date, is_demo BOOLEAN)
 - deposits(deposit_id, client_id, amount_usd, deposit_date, status)  -- status: confirmed|pending|failed
 - trades(trade_id, client_id, symbol, volume_usd, pnl_usd, trade_date)
-Связи: deposits.client_id -> clients.client_id; trades.client_id -> clients.client_id"""
+- marketing_spend(spend_id, channel, spend_date, cost_usd)  -- расходы на привлечение по каналам/месяцам
+- targets(target_id, metric, period, target_value)  -- квартальные ПЛАНЫ; metric in ('total_deposits','trading_volume'); period like '2025-Q1'
+Связи: deposits.client_id -> clients.client_id; trades.client_id -> clients.client_id;
+marketing_spend.channel -> clients.acquisition_channel (по значению канала).
+Для «план vs факт»: факт по кварталу считай из deposits/trades, план бери из targets по совпадающим metric+period."""
 
 SQL_SYSTEM = """Ты пишешь ОДИН read-only SQL SELECT-запрос для DuckDB, отвечающий на вопрос.
 
@@ -62,10 +84,29 @@ SQL_SYSTEM = """Ты пишешь ОДИН read-only SQL SELECT-запрос д�
 
 ПРАВИЛА:
 - Только SELECT. Одно выражение, без ';'. Никаких INSERT/UPDATE/DELETE/DDL.
-- Только таблицы clients, deposits, trades.
+- Только таблицы из схемы (clients, deposits, trades, marketing_spend, targets).
+- НЕТ ДАННЫХ: если для ответа нужны данные, которых НЕТ в схеме (флаги фрода/
+  мошенничества, KYC, риск-скоринг, поведенческие аномалии, данные сотрудников
+  и т.п.) — верни РОВНО одно слово: NO_DATA (без SQL, без пояснений).
+  НЕ подменяй отсутствующие данные похожими (напр. не выдавай PnL вместо фрода).
 - По умолчанию считай реальные счета: WHERE clients.is_demo = FALSE
   (если вопрос явно не про демо-счета).
-- Верни ТОЛЬКО SQL, без markdown, без пояснений."""
+- "самый плохой/худший трейдер" = клиент с минимальным SUM(pnl_usd) (ORDER BY ... ASC);
+  "лучший" = с максимальным. Возвращай client_id и значение.
+- НАКОПИТЕЛЬНЫЙ/нарастающий итог -> SUM(...) OVER (ORDER BY <дата>).
+- ДОЛЯ топ-N: ЗНАМЕНАТЕЛЬ — сумма по ВСЕМ (без ограничения топ-N), ЧИСЛИТЕЛЬ —
+  сумма по топ-N. Шаблон:
+  SELECT 100.0 * (SELECT SUM(volume_usd) FROM trades WHERE client_id IN
+    (SELECT client_id FROM trades GROUP BY client_id ORDER BY SUM(volume_usd) DESC LIMIT 3))
+    / (SELECT SUM(volume_usd) FROM trades) AS top3_share
+- ПЛАН vs ФАКТ: квартал из даты =
+  (EXTRACT(year FROM deposit_date)::VARCHAR || '-Q' || EXTRACT(quarter FROM deposit_date)::VARCHAR).
+  Джойни факт по кварталу с targets ON targets.period = <квартал>
+  AND targets.metric = 'total_deposits' (или 'trading_volume' для оборота).
+- FOLLOW-UP: если ниже дан "ПРЕДЫДУЩИЙ SQL" и вопрос — доработка ("добавь разрез
+  стран", "а теперь по X", "почему", "детализируй"), то ИЗМЕНИ предыдущий SQL,
+  а не пиши с нуля. "почему" — разбей предыдущий показатель на составляющие.
+- Верни ТОЛЬКО SQL (или NO_DATA), без markdown, без пояснений."""
 
 
 def sql_prompt(schema: str = SCHEMA) -> str:

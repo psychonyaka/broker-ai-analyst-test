@@ -13,6 +13,7 @@
 Запуск в CLI:  python pipeline.py "депозиты по странам"
 """
 from dataclasses import dataclass
+import json
 import os
 import subprocess
 import sys
@@ -36,6 +37,7 @@ class Answer:
     data: pd.DataFrame | None = None
     error: str = ""
     provider: str = ""
+    context: dict | None = None  # для multi-turn: план/SQL этого ответа
 
     def __str__(self) -> str:
         if not self.ok:
@@ -60,18 +62,24 @@ class Chatbot:
         # Требует настоящую LLM (fallback-провайдер SQL не пишет — и честно откажет).
         self.allow_sql_fallback = allow_sql_fallback
 
-    def ask(self, question: str) -> Answer:
+    def ask(self, question: str, prev_context: dict | None = None) -> Answer:
+        """prev_context — контекст предыдущего ответа (для multi-turn follow-up).
+
+        Передаётся явно (не глобально), чтобы eval/CLI оставались single-turn,
+        а Streamlit хранил контекст в рамках своей сессии.
+        """
         a = Answer(ok=False, question=question, provider=self.provider.name)
 
-        # 1) LLM -> структурированный план
+        # 1) LLM -> структурированный план (с контекстом предыдущего вопроса)
         try:
-            raw = self.provider.plan(question, self.system)
+            raw = self.provider.plan(self._augment_plan(question, prev_context),
+                                     self.system)
         except Exception as e:
             a.error = f"Ошибка LLM: {e}"
             return a
 
         if not raw.get("metric"):
-            return self._sql_fallback(question, a, raw.get("reason"))
+            return self._sql_fallback(question, a, raw.get("reason"), prev_context)
 
         plan = QueryPlan.from_dict(raw)
 
@@ -92,10 +100,30 @@ class Chatbot:
             a.error = f"Ошибка выполнения: {e}"
             return a
 
+        a.context = {"question": question, "sql": a.sql,
+                     "plan": {"metric": plan.metric, "group_by": plan.group_by,
+                              "filters": plan.filters, "order": plan.order,
+                              "limit": plan.limit}}
+
         a.ok = True
         return a
 
-    def _sql_fallback(self, question: str, a: Answer, reason=None) -> Answer:
+    def _augment_plan(self, question: str, prev: dict | None) -> str:
+        """Добавить компактный контекст предыдущего вопроса (для follow-up).
+
+        Только для настоящей LLM (fallback-провайдер не рассуждает и
+        может ложно сматчиться на текст контекста)."""
+        if not prev or str(self.provider.name).startswith("fallback"):
+            return question
+        note = ["\n\n--- КОНТЕКСТ ПРЕДЫДУЩЕГО ВОПРОСА "
+                "(используй ТОЛЬКО если новый вопрос — уточнение) ---",
+                f'Пред. вопрос: "{prev.get("question", "")}"']
+        if prev.get("plan"):
+            note.append(f'Пред. план: {json.dumps(prev["plan"], ensure_ascii=False)}')
+        return question + "\n".join(note)
+
+    def _sql_fallback(self, question: str, a: Answer, reason=None,
+                      prev: dict | None = None) -> Answer:
         """Уровень 2: вопрос вне semantic layer.
 
         Если провайдер умеет писать SQL (настоящая LLM) и fallback включён —
@@ -109,10 +137,21 @@ class Chatbot:
             a.error = self.layer.reject_message(reason)
             return a
 
+        # follow-up: даём предыдущий SQL, чтобы «добавь разрез»/«почему» достроили его
+        q_sql = question
+        if prev and prev.get("sql") and not str(self.provider.name).startswith("fallback"):
+            q_sql = (question + "\n\n--- ПРЕДЫДУЩИЙ SQL "
+                     f"(измени, если это доработка) ---\n{prev['sql']}")
+
         try:
-            sql = self.provider.sql(question)
+            sql = self.provider.sql(q_sql)
         except Exception as e:
             a.error = self.layer.reject_message(f"SQL-fallback недоступен: {e}")
+            return a
+
+        # предохранитель: L2 сам сигналит, что нужных данных нет в схеме
+        if "NO_DATA" in sql.upper() and "SELECT" not in sql.upper():
+            a.error = self.layer.reject_message("таких данных нет в модели")
             return a
 
         try:
@@ -128,6 +167,7 @@ class Chatbot:
         a.explanation = ("⚠️ Это разовый расчёт, а не одна из проверенных метрик — "
                          "цифра посчитана прямо по вашему вопросу. "
                          "Перепроверьте перед использованием в своих задачах.")
+        a.context = {"question": question, "sql": a.sql, "plan": None}
         a.ok = True
         return a
 

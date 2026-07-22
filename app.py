@@ -8,8 +8,10 @@ Streamlit чат-UI для AI-ассистента над данными бро�
 """
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 from pipeline import Chatbot
+from report import auto_viz  # та же визуализация, что и в HTML-отчёте (KPI/линия/бары/хитмап)
 
 st.set_page_config(page_title="Broker AI Analyst", page_icon="📊", layout="wide")
 
@@ -55,15 +57,24 @@ def render(ans):
     df = ans.data
     st.dataframe(df, use_container_width=True, hide_index=True)
 
-    # авто-график, если есть измерение + мера (defensive: не должен ронять ответ)
-    if df.shape[1] == 2 and len(df) > 1:
-        dim, metric = df.columns
-        if pd.api.types.is_numeric_dtype(df[metric]):
-            try:
-                st.bar_chart(df.head(20).set_index(dim)[metric])
-            except Exception:
-                pass  # график опционален; таблица и SQL уже показаны
+    # авто-график: инлайновый SVG (тот же, что в HTML-отчёте). Не зависит от
+    # Altair/Vega, поэтому рисуется даже там, где у Altair проблемы с сертификатами.
+    viz, h = auto_viz(df)
+    if viz:
+        components.html(viz, height=h)
 
+
+# История чата + контекст последнего ответа (для multi-turn follow-up)
+if "history" not in st.session_state:
+    st.session_state.history = []
+if "ctx" not in st.session_state:
+    st.session_state.ctx = None
+
+for past in st.session_state.history:
+    with st.chat_message("user"):
+        st.write(past.question)
+    with st.chat_message("assistant"):
+        render(past)
 
 q = st.chat_input("Спросите про депозиты, обороты, трейдеров...") or st.session_state.pop("q", None)
 if q:
@@ -71,5 +82,8 @@ if q:
         st.write(q)
     with st.chat_message("assistant"):
         with st.spinner("Думаю..."):
-            ans = bot.ask(q)
+            ans = bot.ask(q, prev_context=st.session_state.ctx)
         render(ans)
+    st.session_state.history.append(ans)
+    if ans.context:  # запоминаем контекст только успешного ответа
+        st.session_state.ctx = ans.context

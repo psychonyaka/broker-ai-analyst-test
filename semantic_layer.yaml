@@ -34,6 +34,14 @@ dimensions:
     sql: date_trunc('month', trades.trade_date)
     synonyms: [месяц, месяцам, динамика]
     grain: month
+  mkt_channel:
+    sql: marketing_spend.channel
+    synonyms: [канал маркетинга, рекламный канал, канал расходов]
+    sample_values: [google_ads, facebook, affiliate, referral]
+  spend_month:
+    sql: date_trunc('month', marketing_spend.spend_date)
+    synonyms: [месяц, месяцам, динамика]
+    grain: month
 
 # --- МЕТРИКИ: каждая = контракт (expression + grain + filters + owner) ---
 metrics:
@@ -107,6 +115,18 @@ metrics:
     owner: product_analytics
     synonyms: [pnl, прибыль клиентов, финрез, результат по сделкам]
 
+  marketing_cost:
+    label: "Marketing Spend, $"
+    description: >
+      Расходы на привлечение (маркетинг) в USD по каналам и месяцам.
+      Это расходная часть — то, что тратим на привлечение клиентов.
+    expression: "SUM(marketing_spend.cost_usd)"
+    table: marketing_spend
+    allowed_dimensions: [mkt_channel, spend_month]
+    format: currency_usd
+    owner: marketing_analytics
+    synonyms: [расходы, расходная часть, затраты, маркетинг, рекламный бюджет, spend, costs]
+
 # --- FEW-SHOT: пары "вопрос -> выбор". Главный рычаг точности NL-to-SQL. ---
 examples:
   - q: "сколько всего внесли депозитов"
@@ -123,3 +143,5 @@ examples:
     pick: {metric: total_deposits, group_by: [country], order: desc, limit: 5}
   - q: "динамика депозитов по месяцам"
     pick: {metric: total_deposits, group_by: [deposit_month]}
+  - q: "расходы на маркетинг по каналам"
+    pick: {metric: marketing_cost, group_by: [mkt_channel]}

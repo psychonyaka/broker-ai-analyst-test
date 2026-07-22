@@ -15,6 +15,14 @@ import yaml
 JOINS = {
     "deposits": "JOIN clients ON clients.client_id = deposits.client_id",
     "trades": "JOIN clients ON clients.client_id = trades.client_id",
+    # marketing_spend/targets самодостаточны — джойн не нужен
+}
+
+# Дата-колонка каждой таблицы (для фильтра по году)
+DATE_COLS = {
+    "deposits": "deposits.deposit_date",
+    "trades": "trades.trade_date",
+    "marketing_spend": "marketing_spend.spend_date",
 }
 
 
@@ -110,8 +118,7 @@ class SemanticLayer:
             where.append(f'({m["filters_builtin"]})')
         for field_name, value in plan.filters.items():
             if field_name == "year":
-                date_col = ("deposits.deposit_date" if base == "deposits"
-                            else "trades.trade_date")
+                date_col = DATE_COLS.get(base, f"{base}.date")
                 where.append(f"EXTRACT(year FROM {date_col}) = {int(value)}")
             else:
                 col = self.dimensions[field_name]["sql"]
@@ -122,7 +129,9 @@ class SemanticLayer:
                     safe = str(value).replace("'", "''")
                     where.append(f"{col} = '{safe}'")
 
-        sql = f"SELECT {', '.join(select_parts)}\nFROM {base}\n{JOINS[base]}"
+        sql = f"SELECT {', '.join(select_parts)}\nFROM {base}"
+        if JOINS.get(base):
+            sql += f"\n{JOINS[base]}"
         if where:
             sql += "\nWHERE " + " AND ".join(where)
         if group_parts:

@@ -23,10 +23,27 @@ def daterange(start, end):
     return start + timedelta(days=random.randint(0, (end - start).days))
 
 
+def month_starts(start, end):
+    """Список первых чисел месяцев в диапазоне [start, end]."""
+    out, y, m = [], start.year, start.month
+    while (y, m) <= (end.year, end.month):
+        out.append(date(y, m, 1))
+        m += 1
+        if m > 12:
+            m, y = 1, y + 1
+    return out
+
+
+def quarter_of(d):
+    return f"{d.year}-Q{(d.month - 1) // 3 + 1}"
+
+
 def main():
     con = duckdb.connect(DB)
     con.execute("DROP TABLE IF EXISTS trades")
     con.execute("DROP TABLE IF EXISTS deposits")
+    con.execute("DROP TABLE IF EXISTS marketing_spend")
+    con.execute("DROP TABLE IF EXISTS targets")
     con.execute("DROP TABLE IF EXISTS clients")
 
     con.execute("""
@@ -54,6 +71,22 @@ def main():
             volume_usd  DOUBLE,
             pnl_usd     DOUBLE,
             trade_date  DATE
+        )""")
+    # Расходы на маркетинг по каналам и месяцам (для "расходная часть", CAC)
+    con.execute("""
+        CREATE TABLE marketing_spend (
+            spend_id   INTEGER PRIMARY KEY,
+            channel    VARCHAR,
+            spend_date DATE,
+            cost_usd   DOUBLE
+        )""")
+    # Квартальные планы по метрикам (для "укладываемся ли в план?", план vs факт)
+    con.execute("""
+        CREATE TABLE targets (
+            target_id    INTEGER PRIMARY KEY,
+            metric       VARCHAR,
+            period       VARCHAR,
+            target_value DOUBLE
         )""")
 
     start, end = date(2025, 1, 1), date(2026, 6, 30)
@@ -98,8 +131,32 @@ def main():
             tid += 1
     con.executemany("INSERT INTO trades VALUES (?,?,?,?,?,?)", trades)
 
+    # --- marketing_spend --- (расходы по каналам помесячно; organic ~бесплатно)
+    channel_budget = {"organic": 0, "google_ads": 40000, "facebook": 30000,
+                      "affiliate": 15000, "referral": 5000}
+    spend, sid = [], 1
+    for mstart in month_starts(start, end):
+        for ch, base in channel_budget.items():
+            if base == 0:
+                continue
+            cost = round(base * random.uniform(0.7, 1.3), 2)
+            spend.append((sid, ch, mstart, cost))
+            sid += 1
+    con.executemany("INSERT INTO marketing_spend VALUES (?,?,?,?)", spend)
+
+    # --- targets --- (квартальные планы по депозитам и обороту; факт то выше, то ниже)
+    quarters = sorted({quarter_of(m) for m in month_starts(start, end)})
+    targets, gid = [], 1
+    for qi, q in enumerate(quarters):
+        # растущий план; факт местами не дотягивает -> интересный "план vs факт"
+        targets.append((gid, "total_deposits", q, round(900_000 + qi * 60_000, 2)))
+        gid += 1
+        targets.append((gid, "trading_volume", q, round(150_000_000 + qi * 12_000_000, 2)))
+        gid += 1
+    con.executemany("INSERT INTO targets VALUES (?,?,?,?)", targets)
+
     # --- сводка ---
-    for t in ["clients", "deposits", "trades"]:
+    for t in ["clients", "deposits", "trades", "marketing_spend", "targets"]:
         n = con.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
         print(f"{t:10s} {n:>8,} rows")
     con.close()

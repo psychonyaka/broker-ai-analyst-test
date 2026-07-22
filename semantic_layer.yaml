@@ -1,0 +1,125 @@
+# ============================================================================
+# SEMANTIC LAYER — "описание данных в LLM-формате"
+# LLM обращается СЮДА, а не к сырой схеме. Это снижает галлюцинации:
+# модель выбирает из сертифицированных метрик/измерений, а не выдумывает SQL.
+# ============================================================================
+
+dataset: broker
+description: >
+  Данные онлайн-брокера: трейдеры (clients), их депозиты (deposits) и
+  торговые сделки (trades). Демо-счета исключаются из денежных метрик.
+
+# --- ИЗМЕРЕНИЯ: по чему МОЖНО резать метрики ---
+dimensions:
+  country:
+    sql: clients.country
+    synonyms: [страна, гео, регион, geo]
+  account_type:
+    sql: clients.account_type
+    synonyms: [тип счёта, тип аккаунта, account]
+    sample_values: [Standard, Pro, Raw Spread, Zero]
+  acquisition_channel:
+    sql: clients.acquisition_channel
+    synonyms: [канал, канал привлечения, источник, channel, marketing channel]
+    sample_values: [organic, google_ads, facebook, affiliate, referral]
+  symbol:
+    sql: trades.symbol
+    synonyms: [инструмент, тикер, символ, пара]
+    sample_values: [EURUSD, XAUUSD, BTCUSD]
+  deposit_month:
+    sql: date_trunc('month', deposits.deposit_date)
+    synonyms: [месяц, месяцам, динамика]
+    grain: month
+  trade_month:
+    sql: date_trunc('month', trades.trade_date)
+    synonyms: [месяц, месяцам, динамика]
+    grain: month
+
+# --- МЕТРИКИ: каждая = контракт (expression + grain + filters + owner) ---
+metrics:
+  total_deposits:
+    label: "Total Deposits, $"
+    description: >
+      Сумма подтверждённых депозитов в USD. Только реальные счета (не демо),
+      только status='confirmed'. Это основной денежный показатель притока.
+    expression: "SUM(deposits.amount_usd)"
+    table: deposits
+    filters_builtin: "deposits.status = 'confirmed' AND clients.is_demo = FALSE"
+    allowed_dimensions: [country, account_type, acquisition_channel, deposit_month]
+    format: currency_usd
+    owner: finance_analytics
+    synonyms: [депозиты, пополнения, объём депозитов, внесения, сумма депозитов]
+
+  deposit_count:
+    label: "Number of Deposits"
+    description: "Количество подтверждённых депозитов (реальные счета)."
+    expression: "COUNT(deposits.deposit_id)"
+    table: deposits
+    filters_builtin: "deposits.status = 'confirmed' AND clients.is_demo = FALSE"
+    allowed_dimensions: [country, account_type, acquisition_channel, deposit_month]
+    format: integer
+    owner: finance_analytics
+    synonyms: [число депозитов, количество пополнений]
+
+  avg_deposit:
+    label: "Average Deposit, $"
+    description: "Средний размер подтверждённого депозита (реальные счета)."
+    expression: "AVG(deposits.amount_usd)"
+    table: deposits
+    filters_builtin: "deposits.status = 'confirmed' AND clients.is_demo = FALSE"
+    allowed_dimensions: [country, account_type, acquisition_channel, deposit_month]
+    format: currency_usd
+    owner: finance_analytics
+    synonyms: [средний депозит, средний чек депозита]
+
+  active_traders:
+    label: "Active Traders"
+    description: >
+      Число уникальных клиентов, совершивших хотя бы одну сделку.
+      Активный трейдер = есть запись в trades.
+    expression: "COUNT(DISTINCT trades.client_id)"
+    table: trades
+    filters_builtin: "clients.is_demo = FALSE"
+    allowed_dimensions: [symbol, trade_month, country, account_type, acquisition_channel]
+    format: integer
+    owner: product_analytics
+    synonyms: [активные трейдеры, активные клиенты, трейдеры, кто торгует]
+
+  trading_volume:
+    label: "Trading Volume, $"
+    description: "Суммарный торговый оборот в USD по сделкам (реальные счета)."
+    expression: "SUM(trades.volume_usd)"
+    table: trades
+    filters_builtin: "clients.is_demo = FALSE"
+    allowed_dimensions: [symbol, trade_month, country, account_type, acquisition_channel]
+    format: currency_usd
+    owner: product_analytics
+    synonyms: [оборот, торговый объём, объём торгов, volume, turnover]
+
+  net_pnl:
+    label: "Client Net PnL, $"
+    description: "Суммарный финансовый результат клиентов по сделкам (может быть отрицательным)."
+    expression: "SUM(trades.pnl_usd)"
+    table: trades
+    filters_builtin: "clients.is_demo = FALSE"
+    allowed_dimensions: [symbol, trade_month, country, account_type, acquisition_channel]
+    format: currency_usd
+    owner: product_analytics
+    synonyms: [pnl, прибыль клиентов, финрез, результат по сделкам]
+
+# --- FEW-SHOT: пары "вопрос -> выбор". Главный рычаг точности NL-to-SQL. ---
+examples:
+  - q: "сколько всего внесли депозитов"
+    pick: {metric: total_deposits}
+  - q: "депозиты по странам"
+    pick: {metric: total_deposits, group_by: [country]}
+  - q: "средний депозит по типам счетов"
+    pick: {metric: avg_deposit, group_by: [account_type]}
+  - q: "сколько активных трейдеров"
+    pick: {metric: active_traders}
+  - q: "торговый оборот по инструментам за 2026"
+    pick: {metric: trading_volume, group_by: [symbol], filters: {year: 2026}}
+  - q: "топ-5 стран по депозитам"
+    pick: {metric: total_deposits, group_by: [country], order: desc, limit: 5}
+  - q: "динамика депозитов по месяцам"
+    pick: {metric: total_deposits, group_by: [deposit_month]}

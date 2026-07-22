@@ -1,0 +1,8 @@
+.env
+.env.txt
+broker.duckdb
+report.html
+__pycache__/
+*.pyc
+.venv/
+*.log

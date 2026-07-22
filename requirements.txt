@@ -1,0 +1,9 @@
+duckdb>=1.0
+pandas>=2.0
+pyyaml>=6.0
+streamlit>=1.30
+# опционально — под конкретного LLM-провайдера:
+anthropic>=0.40      # для ANTHROPIC_API_KEY
+openai>=1.30         # для OPENAI_API_KEY
+requests>=2.30       # для Ollama
+python-dotenv>=1.0   # авто-загрузка .env

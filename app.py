@@ -59,7 +59,7 @@ def render(ans):
 
     # авто-график: инлайновый SVG (тот же, что в HTML-отчёте). Не зависит от
     # Altair/Vega, поэтому рисуется даже там, где у Altair проблемы с сертификатами.
-    viz, h = auto_viz(df)
+    viz, h = auto_viz(df, dark=True)  # Streamlit тёмный -> светлый текст на графиках
     if viz:
         components.html(viz, height=h)
 

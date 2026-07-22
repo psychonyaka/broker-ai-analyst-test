@@ -56,7 +56,8 @@ metrics:
     allowed_dimensions: [country, account_type, acquisition_channel, deposit_month]
     format: currency_usd
     owner: finance_analytics
-    synonyms: [депозиты, пополнения, объём депозитов, внесения, сумма депозитов]
+    synonyms: [депозиты, пополнения, объём депозитов, внесения, сумма депозитов,
+               выручка, приток, приток средств, GMV, gmv, оборот по депозитам]
 
   deposit_count:
     label: "Number of Deposits"

@@ -29,6 +29,14 @@ GOLDEN = [
     {"q": "оборот по каналам привлечения",            "metric": "trading_volume", "dims": ["acquisition_channel"]},
     {"q": "число депозитов по странам",              "metric": "deposit_count",  "dims": ["country"]},
     {"q": "расходы на маркетинг по каналам",          "metric": "marketing_cost", "dims": ["mkt_channel"]},
+    # --- трудные формулировки: синонимы, английский, net_pnl ---
+    {"q": "выручка по странам",                       "metric": "total_deposits", "dims": ["country"]},
+    {"q": "GMV по странам",                           "metric": "total_deposits", "dims": ["country"]},
+    {"q": "приток средств по месяцам",                "metric": "total_deposits", "dims": ["deposit_month"]},
+    {"q": "средний чек по типам счетов",              "metric": "avg_deposit",    "dims": ["account_type"]},
+    {"q": "trading volume by symbol",                 "metric": "trading_volume", "dims": ["symbol"]},
+    {"q": "прибыль клиентов по инструментам",         "metric": "net_pnl",        "dims": ["symbol"]},
+    {"q": "затраты на рекламу по каналам",            "metric": "marketing_cost", "dims": ["mkt_channel"]},
 ]
 
 # Вопросы, которые governed-слой (L1) ДОЛЖЕН отклонить (не сертифицированная метрика)

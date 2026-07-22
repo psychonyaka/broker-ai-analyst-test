@@ -164,10 +164,12 @@ class AnthropicProvider:
 class OpenAIProvider:
     name = "openai"
 
-    def __init__(self, model: str = "gpt-4o-mini"):
+    def __init__(self, model: str | None = None):
         from openai import OpenAI
         self.client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
-        self.model = model
+        # модель настраивается через .env (OPENAI_MODEL); по умолчанию — gpt-4o
+        # (заметно лучше понимает разговорные формулировки, чем -mini)
+        self.model = model or os.environ.get("OPENAI_MODEL", "gpt-4o")
 
     def plan(self, question: str, system: str) -> dict:
         resp = self.client.chat.completions.create(

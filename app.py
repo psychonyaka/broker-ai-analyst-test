@@ -22,8 +22,7 @@ def load_bot(provider, role):
 
 
 st.title("📊 Broker AI Analyst — MVP")
-st.caption("NL-вопрос → semantic layer → structured plan → SQL → данные. "
-           "LLM выбирает из сертифицированных метрик, а не пишет SQL.")
+st.caption("NL-вопрос → semantic layer → structured plan → SQL → данные")
 
 with st.sidebar:
     st.header("Настройки")

@@ -18,12 +18,29 @@ JOINS = {
     # marketing_spend/targets самодостаточны — джойн не нужен
 }
 
-# Дата-колонка каждой таблицы (для фильтра по году)
+# Дата-колонка каждой таблицы (для фильтров по времени)
 DATE_COLS = {
     "deposits": "deposits.deposit_date",
     "trades": "trades.trade_date",
     "marketing_spend": "marketing_spend.spend_date",
 }
+
+# Относительные периоды: «за прошлый месяц», «последний квартал», «с начала года».
+# Считаются от CURRENT_DATE — движком, а не LLM (та лишь выбирает ярлык периода).
+PERIODS = {
+    "last_month":   "{d} >= date_trunc('month', CURRENT_DATE - INTERVAL 1 MONTH) "
+                    "AND {d} < date_trunc('month', CURRENT_DATE)",
+    "this_month":   "{d} >= date_trunc('month', CURRENT_DATE)",
+    "last_quarter": "{d} >= date_trunc('quarter', CURRENT_DATE - INTERVAL 3 MONTH) "
+                    "AND {d} < date_trunc('quarter', CURRENT_DATE)",
+    "this_quarter": "{d} >= date_trunc('quarter', CURRENT_DATE)",
+    "last_year":    "{d} >= date_trunc('year', CURRENT_DATE - INTERVAL 1 YEAR) "
+                    "AND {d} < date_trunc('year', CURRENT_DATE)",
+    "ytd":          "{d} >= date_trunc('year', CURRENT_DATE)",
+}
+
+# Служебные ключи фильтров (не измерения)
+SPECIAL_FILTERS = {"year", "period", "last_n_months"}
 
 
 @dataclass
@@ -97,8 +114,10 @@ class SemanticLayer:
                     f"Метрику '{plan.metric}' нельзя резать по '{d}'. "
                     f"Разрешено: {', '.join(sorted(allowed))}")
         for f in plan.filters:
-            if f not in self.dimensions and f != "year":
+            if f not in self.dimensions and f not in SPECIAL_FILTERS:
                 errors.append(f"Неизвестное поле фильтра: '{f}'")
+        if (p := plan.filters.get("period")) and p not in PERIODS:
+            errors.append(f"Неизвестный период: '{p}'. Доступны: {', '.join(PERIODS)}")
         return errors
 
     # ---------- компиляция в SQL ----------
@@ -120,6 +139,14 @@ class SemanticLayer:
             if field_name == "year":
                 date_col = DATE_COLS.get(base, f"{base}.date")
                 where.append(f"EXTRACT(year FROM {date_col}) = {int(value)}")
+            elif field_name == "period":
+                date_col = DATE_COLS.get(base, f"{base}.date")
+                where.append("(" + PERIODS[value].format(d=date_col) + ")")
+            elif field_name == "last_n_months":
+                date_col = DATE_COLS.get(base, f"{base}.date")
+                where.append(
+                    f"{date_col} >= date_trunc('month', CURRENT_DATE - "
+                    f"INTERVAL {int(value)} MONTH)")
             else:
                 col = self.dimensions[field_name]["sql"]
                 if isinstance(value, (list, tuple)):
@@ -172,8 +199,18 @@ class SemanticLayer:
         if plan.group_by:
             parts.append("разрез по **" + "**, **".join(plan.group_by) + "**")
         if plan.filters:
-            f = ", ".join(f"{k}={v}" for k, v in plan.filters.items())
-            parts.append(f"фильтр: {f}")
+            human = {"last_month": "прошлый месяц", "this_month": "текущий месяц",
+                     "last_quarter": "прошлый квартал", "this_quarter": "текущий квартал",
+                     "last_year": "прошлый год", "ytd": "с начала года"}
+            bits = []
+            for k, v in plan.filters.items():
+                if k == "period":
+                    bits.append(f"период: {human.get(v, v)}")
+                elif k == "last_n_months":
+                    bits.append(f"последние {v} мес.")
+                else:
+                    bits.append(f"{k}={v}")
+            parts.append("фильтр: " + ", ".join(bits))
         if plan.limit:
             parts.append(f"топ-{plan.limit}")
         return "Я понял вопрос так: " + "; ".join(parts) + "."

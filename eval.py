@@ -37,6 +37,15 @@ GOLDEN = [
     {"q": "trading volume by symbol",                 "metric": "trading_volume", "dims": ["symbol"]},
     {"q": "прибыль клиентов по инструментам",         "metric": "net_pnl",        "dims": ["symbol"]},
     {"q": "затраты на рекламу по каналам",            "metric": "marketing_cost", "dims": ["mkt_channel"]},
+    # --- относительные периоды (движок считает даты от CURRENT_DATE) ---
+    {"q": "депозиты за последний квартал",            "metric": "total_deposits", "dims": [],
+     "contains": ["CURRENT_DATE", "quarter"]},
+    {"q": "оборот в прошлом месяце",                  "metric": "trading_volume", "dims": [],
+     "contains": ["CURRENT_DATE", "month"]},
+    {"q": "динамика депозитов за последние 3 месяца", "metric": "total_deposits", "dims": ["deposit_month"],
+     "contains": ["CURRENT_DATE"]},
+    {"q": "сколько депозитов с начала года",          "metric": "total_deposits", "dims": [],
+     "contains": ["CURRENT_DATE", "year"]},
 ]
 
 # Вопросы, которые governed-слой (L1) ДОЛЖЕН отклонить (не сертифицированная метрика)
@@ -67,7 +76,9 @@ def run(provider=None):
         got_metric = ans.ok and case["metric"] in (ans.sql or "")
         got_dims = all(d in (ans.sql or "") for d in case["dims"])
         limit_ok = ("limit" not in case) or (ans.ok and f"LIMIT {case['limit']}" in ans.sql)
-        ok = ans.ok and got_metric and got_dims and limit_ok
+        # опционально: фрагменты, которые обязаны быть в SQL (напр. CURRENT_DATE)
+        contains_ok = all(c in (ans.sql or "") for c in case.get("contains", []))
+        ok = ans.ok and got_metric and got_dims and limit_ok and contains_ok
         plan_ok += ok
         exec_ok += ans.ok
         mark = "OK " if ok else "MISS"

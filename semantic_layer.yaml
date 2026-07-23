@@ -146,3 +146,15 @@ examples:
     pick: {metric: total_deposits, group_by: [deposit_month]}
   - q: "расходы на маркетинг по каналам"
     pick: {metric: marketing_cost, group_by: [mkt_channel]}
+  # --- относительные периоды (движок считает даты сам) ---
+  - q: "депозиты за последний квартал"
+    pick: {metric: total_deposits, filters: {period: last_quarter}}
+  - q: "оборот в прошлом месяце по странам"
+    pick: {metric: trading_volume, group_by: [country], filters: {period: last_month}}
+  - q: "динамика депозитов за последние 3 месяца"
+    pick: {metric: total_deposits, group_by: [deposit_month], filters: {last_n_months: 3}}
+  - q: "сколько депозитов с начала года"
+    pick: {metric: total_deposits, filters: {period: ytd}}
+  # --- суперлатив «худший» -> order asc ---
+  - q: "инструменты с худшей прибылью клиентов"
+    pick: {metric: net_pnl, group_by: [symbol], order: asc}

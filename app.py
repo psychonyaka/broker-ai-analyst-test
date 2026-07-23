@@ -17,8 +17,8 @@ st.set_page_config(page_title="Broker AI Analyst", page_icon="📊", layout="wid
 
 
 @st.cache_resource
-def load_bot(provider):
-    return Chatbot(provider=provider or None)
+def load_bot(provider, role):
+    return Chatbot(provider=provider or None, role=role or None)
 
 
 st.title("📊 Broker AI Analyst — MVP")
@@ -32,12 +32,27 @@ with st.sidebar:
         ["(auto)", "anthropic", "openai", "ollama", "fallback"],
         help="auto: возьмёт ключ из env; fallback работает без ключа")
     provider = "" if provider == "(auto)" else provider
-    bot = load_bot(provider)
+
+    # роль пользователя (RLS-lite): управляет видимостью метрик
+    import semantic as _sem
+    _roles = _sem.SemanticLayer("semantic_layer.yaml").roles
+    role_opts = ["(все метрики)"] + list(_roles)
+    role_pick = st.selectbox(
+        "Роль пользователя", role_opts,
+        format_func=lambda r: _roles[r]["label"] if r in _roles else r,
+        help="Ролевой доступ: часть метрик скрыта от операционных ролей")
+    role = "" if role_pick == "(все метрики)" else role_pick
+
+    bot = load_bot(provider, role)
     st.success(f"Активен: **{bot.provider.name}**")
+    if role:
+        st.caption(f"🔒 Роль: {_roles[role]['label']} — часть метрик скрыта")
 
     st.markdown("**Доступные метрики:**")
+    _allowed = bot.layer.metrics_for_role(bot.role)
     for name, m in bot.layer.metrics.items():
-        st.markdown(f"- {m['label']}")
+        if name in _allowed:
+            st.markdown(f"- {m['label']}")
 
     st.markdown("**Примеры вопросов:**")
     examples = ["депозиты по странам", "топ-5 стран по обороту",

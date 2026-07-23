@@ -37,6 +37,24 @@ business_context: >
   ВАЛЮТА: все суммы в USD. Баланса счетов в данных НЕТ — только депозиты,
   обороты и PnL по сделкам.
 
+# --- РОЛИ: кто какие метрики имеет право видеть (governance / RLS-lite) ---
+# Семантический слой = контракт, поэтому доступ логично описывать здесь же.
+# Метрика, недоступная роли, не попадает ни в каталог LLM, ни в валидацию,
+# ни в определения — как будто её нет. Модель не может «обойти» ограничение.
+roles:
+  board:                       # топ-менеджмент — видит всё
+    label: "Board / C-level"
+    metrics: "*"
+  finance:                     # финансы — деньги и планы, без маркетинг-бюджетов
+    label: "Finance"
+    metrics: [total_deposits, deposit_count, avg_deposit, net_pnl,
+              trading_volume, client_count, active_traders]
+  manager:                     # операционный менеджер — БЕЗ чувствительного
+    label: "Operations manager"
+    metrics: [total_deposits, deposit_count, avg_deposit,
+              client_count, active_traders, trading_volume]
+    # скрыто: net_pnl (клиентский финрез), marketing_cost (рекламные бюджеты)
+
 # --- ИЗМЕРЕНИЯ: по чему МОЖНО резать метрики ---
 dimensions:
   country:

@@ -51,7 +51,8 @@ class Answer:
 
 class Chatbot:
     def __init__(self, db: str = DB, layer_path: str = "semantic_layer.yaml",
-                 provider: str | None = None, allow_sql_fallback: bool = True):
+                 provider: str | None = None, allow_sql_fallback: bool = True,
+                 role: str | None = None):
         self.layer = SemanticLayer(layer_path)
         # Авто-генерация базы, если её нет (свежий clone / Streamlit Cloud):
         # проект должен подниматься одной командой, без ручного шага.
@@ -59,7 +60,8 @@ class Chatbot:
             subprocess.run([sys.executable, "generate_data.py"], check=True)
         self.con = duckdb.connect(db, read_only=True)  # read-only = guardrail
         self.provider = get_provider(self.layer, provider)
-        self.system = build_prompt(self.layer.catalog_for_llm(),
+        self.role = role                       # ролевой доступ (None = видит всё)
+        self.system = build_prompt(self.layer.catalog_for_llm(role),
                                    self.layer.few_shot_for_llm())
         # 2-й уровень: governed SQL-fallback для вопросов вне semantic layer.
         # Требует настоящую LLM (fallback-провайдер SQL не пишет — и честно откажет).
@@ -75,7 +77,7 @@ class Chatbot:
 
         # 0) вопрос О МЕТРИКЕ («что такое активный трейдер?») — отвечаем из
         #    семантического слоя, без обращения к БД
-        if definition := self.layer.definition_answer(question):
+        if definition := self.layer.definition_answer(question, self.role):
             a.ok, a.explanation = True, definition
             return a
 
@@ -93,10 +95,10 @@ class Chatbot:
         plan = QueryPlan.from_dict(raw)
 
         # 2) валидация плана по semantic layer (+ одна попытка самокоррекции)
-        if errors := self.layer.validate(plan):
+        if errors := self.layer.validate(plan, self.role):
             if fixed := self._retry_plan(question, prev_context, errors):
                 plan, a.retried = fixed, True
-                errors = self.layer.validate(plan)
+                errors = self.layer.validate(plan, self.role)
             if errors:
                 a.error = "План не прошёл валидацию: " + "; ".join(errors)
                 return a
@@ -203,6 +205,13 @@ class Chatbot:
         # предохранитель: L2 сам сигналит, что нужных данных нет в схеме
         if "NO_DATA" in sql.upper() and "SELECT" not in sql.upper():
             a.error = self.layer.reject_message("таких данных нет в модели")
+            return a
+
+        # ролевой запрет: L2 не должен доставать колонки скрытых метрик
+        forbidden = self.layer.forbidden_tokens_for_role(self.role)
+        if forbidden and any(tok in sql.lower() for tok in forbidden):
+            a.error = ("Запрос затрагивает данные, недоступные для вашей роли "
+                       "(например, финрез или рекламные бюджеты).")
             return a
 
         a.sql = sql

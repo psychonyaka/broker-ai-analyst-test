@@ -23,6 +23,7 @@ DATE_COLS = {
     "deposits": "deposits.deposit_date",
     "trades": "trades.trade_date",
     "marketing_spend": "marketing_spend.spend_date",
+    "clients": "clients.registration_date",
 }
 
 # Относительные периоды: «за прошлый месяц», «последний квартал», «с начала года».
@@ -85,9 +86,12 @@ class SemanticLayer:
         lines.append("\nDIMENSIONS:")
         for name, d in self.dimensions.items():
             syn = ", ".join(d.get("synonyms", []))
-            sample = d.get("sample_values")
-            extra = f" | sample: {sample}" if sample else ""
-            lines.append(f"- {name} (synonyms: {syn}){extra}")
+            lines.append(f"- {name} (synonyms: {syn})")
+            if desc := d.get("description"):
+                lines.append(f"  {desc.strip()}")
+            if sample := d.get("sample_values"):
+                # ПОЛНЫЙ список значений — чтобы LLM корректно строила фильтры
+                lines.append(f"  values: {sample}")
         return "\n".join(lines)
 
     def few_shot_for_llm(self) -> str:

@@ -46,6 +46,17 @@ GOLDEN = [
      "contains": ["CURRENT_DATE"]},
     {"q": "сколько депозитов с начала года",          "metric": "total_deposits", "dims": [],
      "contains": ["CURRENT_DATE", "year"]},
+    # --- значения измерений (sample_values + описания): рус.название -> англ.значение ---
+    {"q": "депозиты в Таиланде",                      "metric": "total_deposits", "dims": [],
+     "contains": ["Thailand"]},
+    {"q": "оборот по золоту",                         "metric": "trading_volume", "dims": [],
+     "contains": ["XAUUSD"]},
+    {"q": "оборот по нефти",                          "metric": "trading_volume", "dims": [],
+     "contains": ["USOIL"]},
+    {"q": "депозиты по центовым счетам",              "metric": "total_deposits", "dims": [],
+     "contains": ["Standard Cent"]},
+    # --- новая метрика: число клиентов (не путать с active_traders) ---
+    {"q": "клиенты по странам",                       "metric": "client_count",   "dims": ["country"]},
 ]
 
 # Вопросы, которые governed-слой (L1) ДОЛЖЕН отклонить (не сертифицированная метрика)

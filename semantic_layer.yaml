@@ -14,18 +14,35 @@ dimensions:
   country:
     sql: clients.country
     synonyms: [страна, гео, регион, geo]
+    description: >
+      Страна клиента. Значения хранятся ПО-АНГЛИЙСКИ — при фильтре по русскому
+      названию подставляй английское: Кипр=Cyprus, Таиланд=Thailand,
+      ЮАР=South Africa, Индонезия=Indonesia, Нигерия=Nigeria, Вьетнам=Vietnam,
+      ОАЭ=UAE, Индия=India, Бразилия=Brazil, Кения=Kenya.
+    sample_values: [Cyprus, Thailand, South Africa, Indonesia, Nigeria,
+                    Vietnam, UAE, India, Brazil, Kenya]
   account_type:
     sql: clients.account_type
     synonyms: [тип счёта, тип аккаунта, account]
-    sample_values: [Standard, Pro, Raw Spread, Zero]
+    description: >
+      Тип торгового счёта. "Standard Cent" — центовый счёт (мелкие объёмы),
+      "Pro"/"Raw Spread"/"Zero" — профессиональные типы с разными спредами.
+    sample_values: [Standard, Standard Cent, Pro, Raw Spread, Zero]
   acquisition_channel:
     sql: clients.acquisition_channel
     synonyms: [канал, канал привлечения, источник, channel, marketing channel]
+    description: >
+      Канал привлечения клиента: organic — органика, google_ads — гугл-реклама,
+      facebook — фейсбук, affiliate — партнёрка, referral — реферальная программа.
     sample_values: [organic, google_ads, facebook, affiliate, referral]
   symbol:
     sql: trades.symbol
     synonyms: [инструмент, тикер, символ, пара]
-    sample_values: [EURUSD, XAUUSD, BTCUSD]
+    description: >
+      Торговый инструмент: XAUUSD — золото, BTCUSD — биткоин/крипта,
+      USOIL — нефть, US500 — индекс S&P 500, AAPL — акции Apple,
+      EURUSD и GBPUSD — валютные пары.
+    sample_values: [EURUSD, XAUUSD, BTCUSD, GBPUSD, USOIL, US500, AAPL]
   deposit_month:
     sql: date_trunc('month', deposits.deposit_date)
     synonyms: [месяц, месяцам, динамика]
@@ -37,6 +54,9 @@ dimensions:
   mkt_channel:
     sql: marketing_spend.channel
     synonyms: [канал маркетинга, рекламный канал, канал расходов]
+    description: >
+      Канал, на который потрачен рекламный бюджет (organic бесплатен и в
+      расходах не участвует).
     sample_values: [google_ads, facebook, affiliate, referral]
   spend_month:
     sql: date_trunc('month', marketing_spend.spend_date)
@@ -80,6 +100,20 @@ metrics:
     format: currency_usd
     owner: finance_analytics
     synonyms: [средний депозит, средний чек депозита]
+
+  client_count:
+    label: "Clients"
+    description: >
+      Число зарегистрированных клиентов (реальные счета, не демо).
+      Это ВСЕ клиенты — в отличие от active_traders, где только совершившие сделку.
+    expression: "COUNT(DISTINCT clients.client_id)"
+    table: clients
+    filters_builtin: "clients.is_demo = FALSE"
+    allowed_dimensions: [country, account_type, acquisition_channel]
+    format: integer
+    owner: product_analytics
+    synonyms: [клиенты, число клиентов, количество клиентов, сколько клиентов,
+               пользователи, зарегистрированные, база клиентов]
 
   active_traders:
     label: "Active Traders"

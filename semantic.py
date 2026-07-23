@@ -9,7 +9,36 @@ Semantic engine: загружает semantic layer и ДЕТЕРМИНИРОВА
 """
 from dataclasses import dataclass, field
 from typing import Any
+import re
 import yaml
+
+# Вопросы «о метрике», а не «по данным»: на них отвечаем из слоя, без SQL
+DEFINITION_RE = re.compile(
+    r"что такое|что значит|что означает|как счита|как определ|определени|"
+    r"как понима|что входит в", re.IGNORECASE)
+
+
+def _norm(s: str) -> str:
+    return s.lower().replace("ё", "е")
+
+
+def _word_match(a: str, b: str) -> bool:
+    """Совпадение по общей основе (учёт падежей)."""
+    a, b = _norm(a), _norm(b)
+    if a == b:
+        return True
+    n = 0
+    for x, y in zip(a, b):
+        if x != y:
+            break
+        n += 1
+    return n >= 4 and n >= min(len(a), len(b)) - 2
+
+
+def _phrase_in(phrase: str, words: list[str]) -> bool:
+    """Все значимые слова фразы присутствуют в вопросе."""
+    toks = [t for t in re.findall(r"\w+", _norm(phrase)) if len(t) >= 4]
+    return bool(toks) and all(any(_word_match(t, w) for w in words) for t in toks)
 
 # Физическая модель: как таблицы связаны между собой (знает движок, не LLM)
 JOINS = {
@@ -75,14 +104,21 @@ class SemanticLayer:
     # ---------- контекст для LLM ----------
     def catalog_for_llm(self) -> str:
         """Компактное описание метрик/измерений для промпта (LLM-формат)."""
-        lines = ["METRICS:"]
+        lines = []
+        # Глоссарий бизнес-правил: модель не догадается о них сама
+        if ctx := self.spec.get("business_context"):
+            lines += ["BUSINESS CONTEXT (обязательно учитывать):",
+                      ctx.strip(), ""]
+        lines.append("METRICS:")
         for name, m in self.metrics.items():
             syn = ", ".join(m.get("synonyms", []))
-            lines.append(
-                f"- {name}: {m['description'].strip()}\n"
-                f"  synonyms: {syn}\n"
-                f"  allowed_dimensions: {', '.join(m['allowed_dimensions'])}"
-            )
+            block = (f"- {name}: {m['description'].strip()}\n"
+                     f"  synonyms: {syn}\n"
+                     f"  allowed_dimensions: {', '.join(m['allowed_dimensions'])}")
+            # примеры вопросов, на которые отвечает метрика (Lightdash-практика)
+            if ex := m.get("example_questions"):
+                block += "\n  answers questions like: " + "; ".join(f'"{q}"' for q in ex)
+            lines.append(block)
         lines.append("\nDIMENSIONS:")
         for name, d in self.dimensions.items():
             syn = ", ".join(d.get("synonyms", []))
@@ -176,6 +212,36 @@ class SemanticLayer:
         if plan.limit:
             sql += f"\nLIMIT {int(plan.limit)}"
         return sql
+
+    # ---------- вопросы О МЕТРИКЕ (без SQL) ----------
+    def definition_answer(self, question: str) -> str | None:
+        """«Что такое активный трейдер?» -> объяснение из контракта метрики.
+
+        Семантический слой — это ещё и документация: определение, встроенные
+        фильтры, формула и владелец лежат рядом. Отвечаем прямо из слоя,
+        без обращения к БД (данных такой вопрос не требует).
+        """
+        if not DEFINITION_RE.search(question):
+            return None
+        words = re.findall(r"\w+", _norm(question))
+        best, best_len = None, 0
+        for name, m in self.metrics.items():
+            for token in [name, m.get("label", ""), *m.get("synonyms", [])]:
+                if token and _phrase_in(token, words) and len(token) > best_len:
+                    best, best_len = name, len(token)
+        if not best:
+            return None
+
+        m = self.metrics[best]
+        out = [f"**{m['label']}** (`{best}`)", "", m["description"].strip(), "",
+               f"Формула: `{m['expression']}`"]
+        if f := m.get("filters_builtin"):
+            out.append(f"Всегда применяется фильтр: `{f}`")
+        out += [f"Разрешённые разрезы: {', '.join(m['allowed_dimensions'])}",
+                f"Владелец метрики: {m.get('owner', '—')}"]
+        if ex := m.get("example_questions"):
+            out += ["", "Примеры вопросов: " + "; ".join(f'«{q}»' for q in ex)]
+        return "\n".join(out)
 
     # ---------- дружелюбный отказ ----------
     def reject_message(self, reason: str | None = None) -> str:

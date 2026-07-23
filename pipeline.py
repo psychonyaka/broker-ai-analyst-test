@@ -43,6 +43,8 @@ class Answer:
     def __str__(self) -> str:
         if not self.ok:
             return f"[ОТКАЗ] {self.error}"
+        if self.data is None:          # ответ-определение: данных нет
+            return self.explanation
         head = f"{self.explanation}\n\nSQL:\n{self.sql}\n"
         return f"{head}\n{self.data.to_string(index=False)}"
 
@@ -70,6 +72,12 @@ class Chatbot:
         а Streamlit хранил контекст в рамках своей сессии.
         """
         a = Answer(ok=False, question=question, provider=self.provider.name)
+
+        # 0) вопрос О МЕТРИКЕ («что такое активный трейдер?») — отвечаем из
+        #    семантического слоя, без обращения к БД
+        if definition := self.layer.definition_answer(question):
+            a.ok, a.explanation = True, definition
+            return a
 
         # 1) LLM -> структурированный план (с контекстом предыдущего вопроса)
         try:

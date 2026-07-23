@@ -51,6 +51,9 @@ def render(ans):
     if not ans.ok:
         st.error(ans.error)
         return
+    if ans.data is None:          # ответ-определение из семслоя (без SQL)
+        st.markdown(ans.explanation)
+        return
     st.info(ans.explanation)
     with st.expander("Показать SQL"):
         st.code(ans.sql, language="sql")

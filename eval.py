@@ -83,6 +83,13 @@ CHITCHAT = [
     "что ты умеешь?",
 ]
 
+# Вопросы О МЕТРИКЕ: отвечаем из семслоя (документация), без SQL и без БД
+DEFINITIONS = [
+    "что такое активный трейдер",
+    "как считается средний депозит",
+    "что значит выручка",
+]
+
 
 def run(provider=None):
     # L1-замер: fallback выключен, чтобы измерять именно сертифицированный слой.
@@ -134,6 +141,16 @@ def run(provider=None):
         print(f"[{'OK ' if good else 'MISS'}] (chitchat+L2) {q[:35]:35} -> "
               f"{'отказ' if good else 'ОТВЕТИЛ (плохо)'}")
 
+    # Определения метрик: ok=True, но БЕЗ обращения к данным
+    print("-" * 60)
+    def_ok = 0
+    for q in DEFINITIONS:
+        ans = bot.ask(q)
+        good = ans.ok and ans.data is None and not ans.sql
+        def_ok += good
+        print(f"[{'OK ' if good else 'MISS'}] (definition) {q[:38]:38} -> "
+              f"{'ответ из слоя' if good else 'не распознан'}")
+
     n = len(GOLDEN)
     print("=" * 60)
     print(f"plan_accuracy   (L1): {plan_ok}/{n}  ({plan_ok/n:.0%})")
@@ -141,6 +158,7 @@ def run(provider=None):
     print(f"reject_correct  (L1): {rej_ok}/{len(NEGATIVE)}  ({rej_ok/len(NEGATIVE):.0%})")
     print(f"longtail_answered(L2): {lt_ok}/{len(LONGTAIL)}  ({lt_ok/len(LONGTAIL):.0%})")
     print(f"chitchat_rejected(L2): {chat_ok}/{len(CHITCHAT)}  ({chat_ok/len(CHITCHAT):.0%})")
+    print(f"definitions      (L0): {def_ok}/{len(DEFINITIONS)}  ({def_ok/len(DEFINITIONS):.0%})")
 
 
 if __name__ == "__main__":

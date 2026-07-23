@@ -100,8 +100,14 @@ class Chatbot:
                 plan, a.retried = fixed, True
                 errors = self.layer.validate(plan, self.role)
             if errors:
-                a.error = "План не прошёл валидацию: " + "; ".join(errors)
-                return a
+                # ролевой отказ оставляем жёстким: L2 всё равно заблокирует
+                # чувствительные колонки, но пользователю честнее явный отказ
+                if any("роли" in e for e in errors):
+                    a.error = "Доступ ограничён ролью: " + "; ".join(errors)
+                    return a
+                # иначе L1 просто не покрывает вопрос (план-факт, нестандартный
+                # разрез) — мягко откатываемся в governed SQL-fallback (L2)
+                return self._sql_fallback(question, a, "; ".join(errors), prev_context)
 
         # 3) детерминированная компиляция + 4) guardrails + выполнение
         a.explanation = self.layer.explain(plan)

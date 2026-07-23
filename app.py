@@ -44,11 +44,16 @@ with st.sidebar:
 
     bot = load_bot(provider, role)
     st.success(f"Активен: **{bot.provider.name}**")
+
+    _allowed = bot.layer.metrics_for_role(bot.role)
+    _hidden = len(bot.layer.metrics) - len(_allowed)
     if role:
-        st.caption(f"🔒 Роль: {_roles[role]['label']} — часть метрик скрыта")
+        if _hidden > 0:
+            st.caption(f"🔒 Роль: {_roles[role]['label']} — скрыто метрик: {_hidden}")
+        else:
+            st.caption(f"✅ Роль: {_roles[role]['label']} — доступны все метрики")
 
     st.markdown("**Доступные метрики:**")
-    _allowed = bot.layer.metrics_for_role(bot.role)
     for name, m in bot.layer.metrics.items():
         if name in _allowed:
             st.markdown(f"- {m['label']}")

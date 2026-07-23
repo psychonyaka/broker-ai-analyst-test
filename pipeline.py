@@ -38,6 +38,7 @@ class Answer:
     error: str = ""
     provider: str = ""
     context: dict | None = None  # для multi-turn: план/SQL этого ответа
+    retried: bool = False        # ответ получен со второй попытки (self-correction)
 
     def __str__(self) -> str:
         if not self.ok:
@@ -83,10 +84,14 @@ class Chatbot:
 
         plan = QueryPlan.from_dict(raw)
 
-        # 2) валидация плана по semantic layer
+        # 2) валидация плана по semantic layer (+ одна попытка самокоррекции)
         if errors := self.layer.validate(plan):
-            a.error = "План не прошёл валидацию: " + "; ".join(errors)
-            return a
+            if fixed := self._retry_plan(question, prev_context, errors):
+                plan, a.retried = fixed, True
+                errors = self.layer.validate(plan)
+            if errors:
+                a.error = "План не прошёл валидацию: " + "; ".join(errors)
+                return a
 
         # 3) детерминированная компиляция + 4) guardrails + выполнение
         a.explanation = self.layer.explain(plan)
@@ -107,6 +112,44 @@ class Chatbot:
 
         a.ok = True
         return a
+
+    def _can_retry(self) -> bool:
+        """Самокоррекция имеет смысл только с настоящей LLM.
+
+        Fallback-провайдер детерминирован — повтор вернёт тот же результат."""
+        return not str(self.provider.name).startswith("fallback")
+
+    def _retry_plan(self, question: str, prev: dict | None,
+                    errors: list[str]) -> QueryPlan | None:
+        """Одна попытка: показываем модели ошибку валидации, просим исправить.
+
+        Ретраим ТОЛЬКО технический сбой (недопустимый разрез/метрика).
+        Осознанный отказ (metric=null) не ретраится — иначе система начнёт
+        «уговаривать себя» ответить на то, на что отвечать не должна.
+        """
+        if not self._can_retry():
+            return None
+        note = ("\n\n--- ТВОЙ ПРЕДЫДУЩИЙ ПЛАН НЕ ПРОШЁЛ ВАЛИДАЦИЮ ---\n"
+                + "\n".join(f"- {e}" for e in errors)
+                + "\nВерни ИСПРАВЛЕННЫЙ план строго из каталога. "
+                  "Если корректного варианта нет — верни {\"metric\": null}.")
+        try:
+            raw = self.provider.plan(self._augment_plan(question, prev) + note,
+                                     self.system)
+        except Exception:
+            return None
+        return QueryPlan.from_dict(raw) if raw.get("metric") else None
+
+    def _retry_sql(self, question: str, bad_sql: str, err: str) -> str | None:
+        """Одна попытка: отдаём модели текст ошибки БД/guardrails, просим починить."""
+        if not self._can_retry():
+            return None
+        note = (f"{question}\n\n--- ТВОЙ ПРЕДЫДУЩИЙ SQL УПАЛ ---\n{bad_sql}\n"
+                f"Ошибка: {err}\nВерни ИСПРАВЛЕННЫЙ SQL (или NO_DATA).")
+        try:
+            return self.provider.sql(note)
+        except Exception:
+            return None
 
     def _augment_plan(self, question: str, prev: dict | None) -> str:
         """Добавить компактный контекст предыдущего вопроса (для follow-up).
@@ -154,15 +197,25 @@ class Chatbot:
             a.error = self.layer.reject_message("таких данных нет в модели")
             return a
 
+        a.sql = sql
         try:
-            a.sql = sql
             a.data = guardrails.safe_execute(self.con, sql)
-        except guardrails.GuardrailError as e:
-            a.error = f"Ad-hoc SQL отклонён guardrails: {e}"
-            return a
-        except Exception as e:
-            a.error = self.layer.reject_message(f"не удалось выполнить SQL: {e}")
-            return a
+        except Exception as first_err:
+            # одна попытка самокоррекции: показываем модели текст ошибки
+            fixed = self._retry_sql(question, sql, str(first_err)[:300])
+            if not fixed or ("NO_DATA" in fixed.upper() and "SELECT" not in fixed.upper()):
+                if isinstance(first_err, guardrails.GuardrailError):
+                    a.error = f"Ad-hoc SQL отклонён guardrails: {first_err}"
+                else:
+                    a.error = self.layer.reject_message(
+                        f"не удалось выполнить SQL: {first_err}")
+                return a
+            try:
+                a.sql, a.retried = fixed, True
+                a.data = guardrails.safe_execute(self.con, fixed)
+            except Exception as e:
+                a.error = self.layer.reject_message(f"не удалось выполнить SQL: {e}")
+                return a
 
         a.explanation = ("⚠️ Это разовый расчёт, а не одна из проверенных метрик — "
                          "цифра посчитана прямо по вашему вопросу. "

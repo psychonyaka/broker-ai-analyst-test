@@ -50,16 +50,30 @@ def _svg_bar_chart(df: pd.DataFrame, width: int = 640, bar_h: int = 26,
         return ""
     ink, muted = _ink(dark), _muted(dark)
 
+    grid = _grid(dark)
     rows = df.head(15).copy()
     labels = rows[dim].astype(str).tolist()
     values = rows[metric].tolist()
     vmax = max(values) or 1
     label_w, pad, chart_w = 160, 8, 260
-    height = len(rows) * (bar_h + pad) + pad
+    axis_h = 26                                   # место под шкалу снизу
+    bars_h = len(rows) * (bar_h + pad) + pad
+    height = bars_h + axis_h
+    x0 = label_w + 8                              # начало баров = ось Y
 
     parts = [f'<svg viewBox="0 0 {width} {height}" width="100%" '
              f'style="max-width:{width}px" xmlns="http://www.w3.org/2000/svg" '
              f'font-family="system-ui,Segoe UI,Arial" font-size="13">']
+    # оси: вертикальная (Y) и горизонтальная (X) + деления шкалы
+    parts.append(
+        f'<line x1="{x0}" y1="0" x2="{x0}" y2="{bars_h}" stroke="{grid}"/>'
+        f'<line x1="{x0}" y1="{bars_h}" x2="{x0 + chart_w}" y2="{bars_h}" stroke="{grid}"/>')
+    for frac in (0, 0.5, 1):
+        tx = x0 + chart_w * frac
+        parts.append(
+            f'<line x1="{tx:.0f}" y1="{bars_h}" x2="{tx:.0f}" y2="{bars_h+4}" stroke="{grid}"/>'
+            f'<text x="{tx:.0f}" y="{bars_h+17}" text-anchor="middle" fill="{_muted(dark)}" '
+            f'font-size="10">{_fmt(vmax * frac)}</text>')
     for i, (lab, val) in enumerate(zip(labels, values)):
         y = pad + i * (bar_h + pad)
         w = max(1, int(chart_w * (val / vmax)))
@@ -225,7 +239,7 @@ def auto_viz(df: pd.DataFrame, dark: bool = False):
         dim = df.columns[0]
         if _is_temporal(df[dim], str(dim)):
             return _svg_line_chart(df, dark=dark), 260
-        return _svg_bar_chart(df, dark=dark), min(n, 15) * 34 + 24
+        return _svg_bar_chart(df, dark=dark), min(n, 15) * 34 + 52  # +место под ось
     # два разреза + мера -> хитмап
     if ncols == 3 and pd.api.types.is_numeric_dtype(df.iloc[:, 2]):
         try:

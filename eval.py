@@ -63,6 +63,15 @@ LONGTAIL = [
     "сколько всего клиентов",
 ]
 
+# Мусорные сообщения при ВКЛЮЧЁННОМ L2: система обязана отказать, а не
+# сочинять SQL «по мотивам» предыдущего вопроса (класс дыр, который
+# однослойный reject-тест не ловит).
+CHITCHAT = [
+    "ты тупой?",
+    "привет, как дела",
+    "что ты умеешь?",
+]
+
 
 def run(provider=None):
     # L1-замер: fallback выключен, чтобы измерять именно сертифицированный слой.
@@ -103,12 +112,24 @@ def run(provider=None):
         print(f"[{'OK ' if good else 'MISS'}] (L2 fallback) {q[:40]:40s} -> "
               f"{'ответ получен' if good else (ans.error[:40] if ans.error else 'нет данных')}")
 
+    # Мусор при включённом L2 + переданном контексте (худший случай)
+    print("-" * 60)
+    ctx = bot2.ask("депозиты по странам").context   # заранее создаём контекст
+    chat_ok = 0
+    for q in CHITCHAT:
+        ans = bot2.ask(q, prev_context=ctx)
+        good = not ans.ok
+        chat_ok += good
+        print(f"[{'OK ' if good else 'MISS'}] (chitchat+L2) {q[:35]:35} -> "
+              f"{'отказ' if good else 'ОТВЕТИЛ (плохо)'}")
+
     n = len(GOLDEN)
     print("=" * 60)
     print(f"plan_accuracy   (L1): {plan_ok}/{n}  ({plan_ok/n:.0%})")
     print(f"exec_success    (L1): {exec_ok}/{n}  ({exec_ok/n:.0%})")
     print(f"reject_correct  (L1): {rej_ok}/{len(NEGATIVE)}  ({rej_ok/len(NEGATIVE):.0%})")
     print(f"longtail_answered(L2): {lt_ok}/{len(LONGTAIL)}  ({lt_ok/len(LONGTAIL):.0%})")
+    print(f"chitchat_rejected(L2): {chat_ok}/{len(CHITCHAT)}  ({chat_ok/len(CHITCHAT):.0%})")
 
 
 if __name__ == "__main__":

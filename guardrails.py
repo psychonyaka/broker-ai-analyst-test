@@ -20,7 +20,7 @@ MAX_SCANNED_ROWS = 5_000_000
 
 
 class GuardrailError(Exception):
-    """Запрос отклонён guardrails до выполнения."""
+    """Запрос отклонен guardrails до выполнения."""
 
 
 def check_sql(sql: str) -> None:
@@ -36,16 +36,16 @@ def check_sql(sql: str) -> None:
         raise GuardrailError("Множественные выражения запрещены.")
 
     if FORBIDDEN.search(stripped):
-        raise GuardrailError("Обнаружена запрещённая операция (DDL/DML).")
+        raise GuardrailError("Обнаружена запрещенная операция (DDL/DML).")
 
-    # allow-list таблиц: всё после FROM/JOIN должно быть из белого списка.
-    # Имена, введённые самим запросом (CTE из WITH, алиасы подзапросов и таблиц), —
-    # легальны: их тело всё равно ссылается на базовые таблицы, которые тоже
+    # allow-list таблиц: все после FROM/JOIN должно быть из белого списка.
+    # Имена, введенные самим запросом (CTE из WITH, алиасы подзапросов и таблиц), —
+    # легальны: их тело все равно ссылается на базовые таблицы, которые тоже
     # проверяются этим же правилом.
     #
     # Сначала «глушим» FROM внутри функций EXTRACT/SUBSTRING/TRIM/OVERLAY
     # (EXTRACT(quarter FROM col), TRIM(' ' FROM x)) — иначе их внутренний FROM
-    # ловится как ссылка на таблицу и даёт ложное срабатывание.
+    # ловится как ссылка на таблицу и дает ложное срабатывание.
     scan = re.sub(r"\b(?:EXTRACT|SUBSTRING|SUBSTR|TRIM|OVERLAY)\s*\([^()]*\)",
                   " ", stripped, flags=re.IGNORECASE)
     local = {n.lower() for n in (
@@ -57,7 +57,7 @@ def check_sql(sql: str) -> None:
                                 scan, re.IGNORECASE))
     unknown = {t.lower() for t in referenced} - ALLOWED_TABLES - local
     if unknown:
-        raise GuardrailError(f"Обращение к неразрешённым таблицам: {unknown}")
+        raise GuardrailError(f"Обращение к неразрешенным таблицам: {unknown}")
 
 
 def enforce_limit(sql: str, max_rows: int = MAX_ROWS) -> str:
@@ -70,7 +70,7 @@ def enforce_limit(sql: str, max_rows: int = MAX_ROWS) -> str:
 def dry_run(con, sql: str, max_scanned: int = MAX_SCANNED_ROWS) -> None:
     """
     Dry-run через EXPLAIN: оцениваем план ДО выполнения.
-    Позволяет отсечь заведомо тяжёлые запросы, ничего не выполняя.
+    Позволяет отсечь заведомо тяжелые запросы, ничего не выполняя.
     """
     try:
         plan = con.execute(f"EXPLAIN {sql}").fetchall()
@@ -81,7 +81,7 @@ def dry_run(con, sql: str, max_scanned: int = MAX_SCANNED_ROWS) -> None:
     for m in re.finditer(r"EC[:=]\s*(\d+)", plan_text):
         if int(m.group(1)) > max_scanned:
             raise GuardrailError(
-                f"Запрос слишком тяжёлый (оценка ~{m.group(1)} строк).")
+                f"Запрос слишком тяжелый (оценка ~{m.group(1)} строк).")
 
 
 def safe_execute(con, sql: str):

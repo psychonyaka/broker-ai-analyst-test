@@ -54,13 +54,13 @@ class Chatbot:
                  provider: str | None = None, allow_sql_fallback: bool = True,
                  role: str | None = None):
         self.layer = SemanticLayer(layer_path)
-        # Авто-генерация базы, если её нет (свежий clone / Streamlit Cloud):
+        # Авто-генерация базы, если ее нет (свежий clone / Streamlit Cloud):
         # проект должен подниматься одной командой, без ручного шага.
         if not os.path.exists(db):
             subprocess.run([sys.executable, "generate_data.py"], check=True)
         self.con = duckdb.connect(db, read_only=True)  # read-only = guardrail
         self.provider = get_provider(self.layer, provider)
-        self.role = role                       # ролевой доступ (None = видит всё)
+        self.role = role                       # ролевой доступ (None = видит все)
         self.system = build_prompt(self.layer.catalog_for_llm(role),
                                    self.layer.few_shot_for_llm())
         # 2-й уровень: governed SQL-fallback для вопросов вне semantic layer.
@@ -70,7 +70,7 @@ class Chatbot:
     def ask(self, question: str, prev_context: dict | None = None) -> Answer:
         """prev_context — контекст предыдущего ответа (для multi-turn follow-up).
 
-        Передаётся явно (не глобально), чтобы eval/CLI оставались single-turn,
+        Передается явно (не глобально), чтобы eval/CLI оставались single-turn,
         а Streamlit хранил контекст в рамках своей сессии.
         """
         a = Answer(ok=False, question=question, provider=self.provider.name)
@@ -100,10 +100,10 @@ class Chatbot:
                 plan, a.retried = fixed, True
                 errors = self.layer.validate(plan, self.role)
             if errors:
-                # ролевой отказ оставляем жёстким: L2 всё равно заблокирует
+                # ролевой отказ оставляем жестким: L2 все равно заблокирует
                 # чувствительные колонки, но пользователю честнее явный отказ
                 if any("роли" in e for e in errors):
-                    a.error = "Доступ ограничён ролью: " + "; ".join(errors)
+                    a.error = "Доступ ограничен ролью: " + "; ".join(errors)
                     return a
                 # иначе L1 просто не покрывает вопрос (план-факт, нестандартный
                 # разрез) — мягко откатываемся в governed SQL-fallback (L2)
@@ -115,7 +115,7 @@ class Chatbot:
             a.sql = self.layer.compile_sql(plan)
             a.data = guardrails.safe_execute(self.con, a.sql)
         except guardrails.GuardrailError as e:
-            a.error = f"Запрос отклонён guardrails: {e}"
+            a.error = f"Запрос отклонен guardrails: {e}"
             return a
         except Exception as e:
             a.error = f"Ошибка выполнения: {e}"
@@ -132,7 +132,7 @@ class Chatbot:
     def _can_retry(self) -> bool:
         """Самокоррекция имеет смысл только с настоящей LLM.
 
-        Fallback-провайдер детерминирован — повтор вернёт тот же результат."""
+        Fallback-провайдер детерминирован — повтор вернет тот же результат."""
         return not str(self.provider.name).startswith("fallback")
 
     def _retry_plan(self, question: str, prev: dict | None,
@@ -140,12 +140,12 @@ class Chatbot:
         """Одна попытка: показываем модели ошибку валидации, просим исправить.
 
         Ретраим ТОЛЬКО технический сбой (недопустимый разрез/метрика).
-        Осознанный отказ (metric=null) не ретраится — иначе система начнёт
+        Осознанный отказ (metric=null) не ретраится — иначе система начнет
         «уговаривать себя» ответить на то, на что отвечать не должна.
         """
         if not self._can_retry():
             return None
-        note = ("\n\n--- ТВОЙ ПРЕДЫДУЩИЙ ПЛАН НЕ ПРОШЁЛ ВАЛИДАЦИЮ ---\n"
+        note = ("\n\n--- ТВОЙ ПРЕДЫДУЩИЙ ПЛАН НЕ ПРОШЕЛ ВАЛИДАЦИЮ ---\n"
                 + "\n".join(f"- {e}" for e in errors)
                 + "\nВерни ИСПРАВЛЕННЫЙ план строго из каталога. "
                   "Если корректного варианта нет — верни {\"metric\": null}.")
@@ -157,7 +157,7 @@ class Chatbot:
         return QueryPlan.from_dict(raw) if raw.get("metric") else None
 
     def _retry_sql(self, question: str, bad_sql: str, err: str) -> str | None:
-        """Одна попытка: отдаём модели текст ошибки БД/guardrails, просим починить."""
+        """Одна попытка: отдаем модели текст ошибки БД/guardrails, просим починить."""
         if not self._can_retry():
             return None
         note = (f"{question}\n\n--- ТВОЙ ПРЕДЫДУЩИЙ SQL УПАЛ ---\n{bad_sql}\n"
@@ -185,7 +185,7 @@ class Chatbot:
                       prev: dict | None = None) -> Answer:
         """Уровень 2: вопрос вне semantic layer.
 
-        Если провайдер умеет писать SQL (настоящая LLM) и fallback включён —
+        Если провайдер умеет писать SQL (настоящая LLM) и fallback включен —
         генерируем ОДИН SELECT и прогоняем через ТЕ ЖЕ guardrails. Иначе —
         честный отказ с подсказкой, что система умеет.
 
@@ -196,7 +196,7 @@ class Chatbot:
             a.error = self.layer.reject_message(reason)
             return a
 
-        # follow-up: даём предыдущий SQL, чтобы «добавь разрез»/«почему» достроили его
+        # follow-up: даем предыдущий SQL, чтобы «добавь разрез»/«почему» достроили его
         q_sql = question
         if prev and prev.get("sql") and not str(self.provider.name).startswith("fallback"):
             q_sql = (question + "\n\n--- ПРЕДЫДУЩИЙ SQL "
@@ -228,7 +228,7 @@ class Chatbot:
             fixed = self._retry_sql(question, sql, str(first_err)[:300])
             if not fixed or ("NO_DATA" in fixed.upper() and "SELECT" not in fixed.upper()):
                 if isinstance(first_err, guardrails.GuardrailError):
-                    a.error = f"Ad-hoc SQL отклонён guardrails: {first_err}"
+                    a.error = f"Ad-hoc SQL отклонен guardrails: {first_err}"
                 else:
                     a.error = self.layer.reject_message(
                         f"не удалось выполнить SQL: {first_err}")
@@ -240,7 +240,7 @@ class Chatbot:
                 a.error = self.layer.reject_message(f"не удалось выполнить SQL: {e}")
                 return a
 
-        a.explanation = ("⚠️ Это разовый расчёт, а не одна из проверенных метрик — "
+        a.explanation = ("⚠️ Это разовый расчет, а не одна из проверенных метрик — "
                          "цифра посчитана прямо по вашему вопросу. "
                          "Перепроверьте перед использованием в своих задачах.")
         a.context = {"question": question, "sql": a.sql, "plan": None}

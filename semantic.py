@@ -23,7 +23,7 @@ def _norm(s: str) -> str:
 
 
 def _word_match(a: str, b: str) -> bool:
-    """Совпадение по общей основе (учёт падежей)."""
+    """Совпадение по общей основе (учет падежей)."""
     a, b = _norm(a), _norm(b)
     if a == b:
         return True
@@ -123,7 +123,7 @@ class SemanticLayer:
             expr = self.metrics[name].get("expression", "").lower()
             toks |= set(re.findall(r"\b\w+_usd\b", expr))   # напр. pnl_usd, cost_usd
             toks.add(self.metrics[name].get("table", "").lower())
-        # не запрещаем то, что нужно РАЗРЕШЁННЫМ метрикам
+        # не запрещаем то, что нужно РАЗРЕШЕННЫМ метрикам
         allowed_tables = {self.metrics[n].get("table", "").lower() for n in allowed}
         return {t for t in toks if t and t not in allowed_tables}
 
@@ -131,7 +131,7 @@ class SemanticLayer:
     def catalog_for_llm(self, role: str | None = None) -> str:
         """Компактное описание метрик/измерений для промпта (LLM-формат).
 
-        role — если задана, в каталог попадают только разрешённые метрики
+        role — если задана, в каталог попадают только разрешенные метрики
         (модель не узнает о существовании скрытых)."""
         allowed = self.metrics_for_role(role)
         lines = []
@@ -253,7 +253,7 @@ class SemanticLayer:
     def definition_answer(self, question: str, role: str | None = None) -> str | None:
         """«Что такое активный трейдер?» -> объяснение из контракта метрики.
 
-        Семантический слой — это ещё и документация: определение, встроенные
+        Семантический слой — это еще и документация: определение, встроенные
         фильтры, формула и владелец лежат рядом. Отвечаем прямо из слоя,
         без обращения к БД (данных такой вопрос не требует).
         Скрытые для роли метрики не раскрываются даже как определение.
@@ -277,7 +277,7 @@ class SemanticLayer:
                f"Формула: `{m['expression']}`"]
         if f := m.get("filters_builtin"):
             out.append(f"Всегда применяется фильтр: `{f}`")
-        out += [f"Разрешённые разрезы: {', '.join(m['allowed_dimensions'])}",
+        out += [f"Разрешенные разрезы: {', '.join(m['allowed_dimensions'])}",
                 f"Владелец метрики: {m.get('owner', '—')}"]
         if ex := m.get("example_questions"):
             out += ["", "Примеры вопросов: " + "; ".join(f'«{q}»' for q in ex)]

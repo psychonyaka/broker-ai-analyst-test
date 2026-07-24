@@ -2,7 +2,7 @@
 MCP-сервер: экспонирует semantic layer и бота как инструменты для агента.
 
 Зачем это здесь: в агентной архитектуре (Azure AI Foundry, Claude Desktop и т.п.)
-оркестратор дёргает не «сырой SQL», а ИНСТРУМЕНТЫ через MCP (Model Context
+оркестратор дергает не «сырой SQL», а ИНСТРУМЕНТЫ через MCP (Model Context
 Protocol). Этот сервер — ровно тот "MCP-tool: query_metrics", который в
 проектной архитектуре описан как главный путь агента к governed-семантике.
 
@@ -11,7 +11,7 @@ Protocol). Этот сервер — ровно тот "MCP-tool: query_metrics"
 - ask(question)             — полный NL->plan->SQL->данные с guardrails
 - query_metric(metric, ...) — прямой governed-вызов метрики (без LLM)
 
-Запуск (stdio-транспорт, как ждёт Claude Desktop / любой MCP-клиент):
+Запуск (stdio-транспорт, как ждет Claude Desktop / любой MCP-клиент):
     pip install "mcp[cli]"
     python mcp_server.py
 
@@ -26,7 +26,7 @@ Protocol). Этот сервер — ровно тот "MCP-tool: query_metrics"
     }
 
 Примечание: MCP — опциональная витрина архитектуры. Ядро (semantic layer,
-guardrails, eval, Streamlit) работает и без неё.
+guardrails, eval, Streamlit) работает и без нее.
 """
 import json
 
@@ -47,7 +47,7 @@ _bot = Chatbot()  # переиспользуем полный конвейер (
 
 @mcp.tool()
 def list_metrics() -> str:
-    """Список сертифицированных метрик с описанием и разрешёнными разрезами.
+    """Список сертифицированных метрик с описанием и разрешенными разрезами.
 
     Агент вызывает это, чтобы знать доступный словарь (grounding), прежде чем
     задавать вопросы — как каталог инструментов."""
@@ -86,7 +86,7 @@ def query_metric(metric: str, group_by: list[str] | None = None,
     """Прямой governed-вызов метрики БЕЗ LLM (детерминированный путь).
 
     Полезно, когда агент уже знает метрику из list_metrics() — тогда обращение
-    идёт без риска NL-разбора. План валидируется по semantic layer и
+    идет без риска NL-разбора. План валидируется по semantic layer и
     прогоняется через те же guardrails."""
     plan = QueryPlan(metric=metric, group_by=group_by or [], limit=limit)
     if errors := _bot.layer.validate(plan):

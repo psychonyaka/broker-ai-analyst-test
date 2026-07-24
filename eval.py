@@ -123,7 +123,7 @@ def run(provider=None):
     rej_ok = 0
     for q in NEGATIVE:
         ans = bot.ask(q)
-        good = not ans.ok  # правильно = отклонён
+        good = not ans.ok  # правильно = отклонен
         rej_ok += good
         print(f"[{'OK ' if good else 'MISS'}] (reject) {q[:40]}")
 
@@ -138,9 +138,9 @@ def run(provider=None):
         print(f"[{'OK ' if good else 'MISS'}] (L2 fallback) {q[:40]:40s} -> "
               f"{'ответ получен' if good else (ans.error[:40] if ans.error else 'нет данных')}")
 
-    # Мусор при включённом L2 + переданном контексте (худший случай)
+    # Мусор при включенном L2 + переданном контексте (худший случай)
     print("-" * 60)
-    ctx = bot2.ask("депозиты по странам").context   # заранее создаём контекст
+    ctx = bot2.ask("депозиты по странам").context   # заранее создаем контекст
     chat_ok = 0
     for q in CHITCHAT:
         ans = bot2.ask(q, prev_context=ctx)

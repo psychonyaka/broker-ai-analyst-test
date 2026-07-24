@@ -1,7 +1,7 @@
 """
-Генерация self-contained HTML-отчёта из ответа бота.
+Генерация self-contained HTML-отчета из ответа бота.
 
-Зачем: агенту в реальной архитектуре мало «вернуть таблицу» — он отдаёт
+Зачем: агенту в реальной архитектуре мало «вернуть таблицу» — он отдает
 готовый артефакт (report / board), который открывается двойным кликом без
 установки чего-либо. Один файл: вопрос -> "как я понял" -> SQL -> таблица ->
 инлайновый SVG-график. Никаких внешних библиотек и CDN (важно для доверия
@@ -20,16 +20,16 @@ from pipeline import Chatbot
 
 
 # --------------------------------------------------------------------------
-# Фирменная палитра (в духе Exness: жёлтый + тёмный). Только цвета, без
+# Фирменная палитра (в духе Exness: желтый + темный). Только цвета, без
 # логотипа/названия — визуал «в бренде», но не имитирует компанию.
 # --------------------------------------------------------------------------
-DARK = "#1B1D24"        # тёмный фон карточек
-ACCENT = "#FFD200"      # фирменный жёлтый (на тёмном)
-DATA = "#E8B400"        # золотой для данных (читается и на белом, и на тёмном)
+DARK = "#1B1D24"        # темный фон карточек
+ACCENT = "#FFD200"      # фирменный желтый (на темном)
+DATA = "#E8B400"        # золотой для данных (читается и на белом, и на темном)
 INK = "#1B1D24"         # основной текст (светлый фон)
-MUTED = "#6B7280"       # приглушённый текст (светлый фон)
+MUTED = "#6B7280"       # приглушенный текст (светлый фон)
 GRID = "#E5E7EB"        # линии сетки (светлый фон)
-# Тёмная тема (Streamlit): текст должен быть светлым, иначе не виден
+# Темная тема (Streamlit): текст должен быть светлым, иначе не виден
 INK_D = "#E8EAED"
 MUTED_D = "#AAB0BC"
 GRID_D = "#3A3D46"
@@ -173,7 +173,7 @@ def _svg_heatmap(df: pd.DataFrame, cell: int = 46, dark: bool = False) -> str:
     """Хитмап для двух разрезов: dim1 (строки) x dim2 (столбцы), цвет = мера.
 
     Полезно, когда вопрос имеет два измерения (напр. «оборот по странам и
-    типам счетов»). Интенсивность жёлтого = величина метрики."""
+    типам счетов»). Интенсивность желтого = величина метрики."""
     ink, grid = _ink(dark), _grid(dark)
     dim1, dim2, metric = df.columns
     piv = df.pivot_table(index=dim1, columns=dim2, values=metric, aggfunc="sum")
@@ -200,7 +200,7 @@ def _svg_heatmap(df: pd.DataFrame, cell: int = 46, dark: bool = False) -> str:
             val = piv.loc[piv.index[i], piv.columns[j]]
             val = 0 if pd.isna(val) else val
             t = (val / vmax) ** 0.6  # gamma для читаемости слабых значений
-            # интерполяция белый -> жёлтый (ACCENT)
+            # интерполяция белый -> желтый (ACCENT)
             rr = int(255 + (255 - 255) * t); gg = int(255 - (255 - 210) * t)
             bb = int(255 - (255 - 0) * t)
             cx = lab_w + j * cell
@@ -218,8 +218,8 @@ def _svg_heatmap(df: pd.DataFrame, cell: int = 46, dark: bool = False) -> str:
 def auto_viz(df: pd.DataFrame, dark: bool = False):
     """Авто-выбор визуализации по форме данных. Возвращает (html, высота_px).
 
-    dark=True — светлый текст для тёмного фона (Streamlit); False — тёмный
-    текст для светлого HTML-отчёта.
+    dark=True — светлый текст для темного фона (Streamlit); False — темный
+    текст для светлого HTML-отчета.
 
     - одно число            -> KPI-карточка
     - время + мера          -> линейный график
@@ -230,7 +230,7 @@ def auto_viz(df: pd.DataFrame, dark: bool = False):
     if df is None or df.empty:
         return "", 0
     n, ncols = len(df), df.shape[1]
-    # одно значение -> KPI (карточка тёмная сама по себе — тема не важна)
+    # одно значение -> KPI (карточка темная сама по себе — тема не важна)
     if n == 1 and ncols == 1 and pd.api.types.is_numeric_dtype(df.iloc[:, 0]):
         return _kpi_card(df.iloc[0, 0], str(df.columns[0])), 150
     if ncols == 2 and pd.api.types.is_numeric_dtype(df.iloc[:, 1]):
@@ -269,7 +269,7 @@ def _table(df: pd.DataFrame) -> str:
 HTML_TMPL = """<!doctype html>
 <html lang="ru"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Broker AI Analyst — отчёт</title>
+<title>Broker AI Analyst — отчет</title>
 <style>
   body {{ font-family: system-ui, "Segoe UI", Arial, sans-serif; color:#1a1a1a;
          max-width: 820px; margin: 40px auto; padding: 0 20px; line-height:1.5; }}
@@ -323,7 +323,7 @@ def main():
     ans = bot.ask(question)
     with open(out, "w", encoding="utf-8") as f:
         f.write(render_html(ans))
-    print(f"Отчёт сохранён: {out}  (провайдер: {ans.provider})")
+    print(f"Отчет сохранен: {out}  (провайдер: {ans.provider})")
     try:
         webbrowser.open(out)
     except Exception:

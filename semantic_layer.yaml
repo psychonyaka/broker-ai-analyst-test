@@ -10,7 +10,7 @@ description: >
   торговые сделки (trades). Демо-счета исключаются из денежных метрик.
 
 # --- KNOWLEDGE / ГЛОССАРИЙ: бизнес-правила и особенности данных ---
-# Подаётся в промпт LLM. Снимает целый класс ошибок интерпретации:
+# Подается в промпт LLM. Снимает целый класс ошибок интерпретации:
 # модель не догадывается о правилах — ей надо их сказать явно.
 business_context: >
   ПЕРИОД ДАННЫХ: 2025-01-01 … 2026-06-30. Данных вне этого диапазона нет.
@@ -21,11 +21,11 @@ business_context: >
   явно пометить, что результат нестандартный.
 
   ДЕПОЗИТ: засчитывается ТОЛЬКО статус 'confirmed'. Статусы 'pending' и
-  'failed' в депозитных метриках не участвуют — это отказы и незавершённые
+  'failed' в депозитных метриках не участвуют — это отказы и незавершенные
   платежи, а не деньги на счету.
 
   ВОРОНКА: регистрация → депозит → торговля. Торгуют только клиенты
-  с подтверждённым депозитом. Поэтому active_traders всегда меньше клиентов.
+  с подтвержденным депозитом. Поэтому active_traders всегда меньше клиентов.
 
   АКТИВНЫЙ ТРЕЙДЕР = клиент, совершивший хотя бы одну сделку за период.
   Не путать с client_count — это все зарегистрированные клиенты.
@@ -40,9 +40,9 @@ business_context: >
 # --- РОЛИ: кто какие метрики имеет право видеть (governance / RLS-lite) ---
 # Семантический слой = контракт, поэтому доступ логично описывать здесь же.
 # Метрика, недоступная роли, не попадает ни в каталог LLM, ни в валидацию,
-# ни в определения — как будто её нет. Модель не может «обойти» ограничение.
+# ни в определения — как будто ее нет. Модель не может «обойти» ограничение.
 roles:
-  board:                       # топ-менеджмент — видит всё
+  board:                       # топ-менеджмент — видит все
     label: "Board / C-level"
     metrics: "*"
   finance:                     # финансы — деньги и планы, без маркетинг-бюджетов
@@ -69,9 +69,9 @@ dimensions:
                     Vietnam, UAE, India, Brazil, Kenya]
   account_type:
     sql: clients.account_type
-    synonyms: [тип счёта, тип аккаунта, account]
+    synonyms: [тип счета, тип аккаунта, account]
     description: >
-      Тип торгового счёта. "Standard Cent" — центовый счёт (мелкие объёмы),
+      Тип торгового счета. "Standard Cent" — центовый счет (мелкие объемы),
       "Pro"/"Raw Spread"/"Zero" — профессиональные типы с разными спредами.
     sample_values: [Standard, Standard Cent, Pro, Raw Spread, Zero]
   acquisition_channel:
@@ -79,7 +79,7 @@ dimensions:
     synonyms: [канал, канал привлечения, источник, channel, marketing channel]
     description: >
       Канал привлечения клиента: organic — органика, google_ads — гугл-реклама,
-      facebook — фейсбук, affiliate — партнёрка, referral — реферальная программа.
+      facebook — фейсбук, affiliate — партнерка, referral — реферальная программа.
     sample_values: [organic, google_ads, facebook, affiliate, referral]
   symbol:
     sql: trades.symbol
@@ -114,7 +114,7 @@ metrics:
   total_deposits:
     label: "Total Deposits, $"
     description: >
-      Сумма подтверждённых депозитов в USD. Только реальные счета (не демо),
+      Сумма подтвержденных депозитов в USD. Только реальные счета (не демо),
       только status='confirmed'. Это основной денежный показатель притока.
     expression: "SUM(deposits.amount_usd)"
     table: deposits
@@ -122,7 +122,7 @@ metrics:
     allowed_dimensions: [country, account_type, acquisition_channel, deposit_month]
     format: currency_usd
     owner: finance_analytics
-    synonyms: [депозиты, пополнения, объём депозитов, внесения, сумма депозитов,
+    synonyms: [депозиты, пополнения, объем депозитов, внесения, сумма депозитов,
                выручка, приток, приток средств, GMV, gmv, оборот по депозитам]
     example_questions:
       - "сколько всего внесли депозитов"
@@ -131,7 +131,7 @@ metrics:
 
   deposit_count:
     label: "Number of Deposits"
-    description: "Количество подтверждённых депозитов (реальные счета)."
+    description: "Количество подтвержденных депозитов (реальные счета)."
     expression: "COUNT(deposits.deposit_id)"
     table: deposits
     filters_builtin: "deposits.status = 'confirmed' AND clients.is_demo = FALSE"
@@ -145,7 +145,7 @@ metrics:
 
   avg_deposit:
     label: "Average Deposit, $"
-    description: "Средний размер подтверждённого депозита (реальные счета)."
+    description: "Средний размер подтвержденного депозита (реальные счета)."
     expression: "AVG(deposits.amount_usd)"
     table: deposits
     filters_builtin: "deposits.status = 'confirmed' AND clients.is_demo = FALSE"
@@ -200,7 +200,7 @@ metrics:
     allowed_dimensions: [symbol, trade_month, country, account_type, acquisition_channel]
     format: currency_usd
     owner: product_analytics
-    synonyms: [оборот, торговый объём, объём торгов, volume, turnover]
+    synonyms: [оборот, торговый объем, объем торгов, volume, turnover]
     example_questions:
       - "торговый оборот по инструментам"
       - "топ-5 стран по обороту"

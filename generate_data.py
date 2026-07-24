@@ -2,7 +2,7 @@
 Генерация синтетических данных брокера в DuckDB.
 Домен: онлайн-брокер (трейдеры, депозиты, сделки) — близко к Exness.
 
-Запуск: python generate_data.py  ->  создаёт broker.duckdb
+Запуск: python generate_data.py  ->  создает broker.duckdb
 """
 import duckdb
 import random
@@ -118,7 +118,7 @@ def main():
             did += 1
     con.executemany("INSERT INTO deposits VALUES (?,?,?,?,?)", deposits)
 
-    # --- trades --- (активные трейдеры = те, кто внёс подтверждённый депозит)
+    # --- trades --- (активные трейдеры = те, кто внес подтвержденный депозит)
     depositors = {d[1] for d in deposits if d[4] == "confirmed"}
     trades, tid = [], 1
     for cid in depositors:
